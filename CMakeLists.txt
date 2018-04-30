@@ -168,14 +168,24 @@ set_property(DIRECTORY APPEND PROPERTY
 find_package(PNG QUIET)
 if (NOT PNG_FOUND)
     message(STATUS "libpng not found. Some debugging features have been disabled.")
+else()
+  message(STATUS "Using static libpng from Externals")
+  add_subdirectory(externals/libpng)
+  set(PNG png)
 endif()
 
 find_package(Boost 1.63.0 QUIET)
 if (NOT Boost_FOUND)
     message(STATUS "Boost 1.63.0 or newer not found, falling back to externals")
 
-    set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/externals/boost")
-    set(Boost_NO_SYSTEM_PATHS OFF)
+    # Explicitly tell cmake where to find boost
+    if(ANDROID)
+        set(Boost_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/externals/boost")
+    else()
+        set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/externals/boost")
+        set(Boost_NO_SYSTEM_PATHS OFF)
+    endif()
+
     find_package(Boost QUIET REQUIRED)
 endif()
 
@@ -273,8 +283,14 @@ ENDIF (APPLE)
 # MINGW: GCC does not support codecvt, so use iconv instead
 if (UNIX OR MINGW)
     find_library(ICONV_LIBRARY NAMES iconv)
-    if (ICONV_LIBRARY)
+
+    if (NOT ANDROID AND ICONV_LIBRARY)
         list(APPEND PLATFORM_LIBRARIES ${ICONV_LIBRARY})
+    else()
+        message(STATUS "Using static iconv from Externals")
+        include_directories(Externals/libiconv-1.14/include)
+        add_subdirectory(Externals/libiconv-1.14)
+        set(ICONV_LIBRARIES iconv)
     endif()
 endif()
 
