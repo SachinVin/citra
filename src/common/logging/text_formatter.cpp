@@ -5,8 +5,11 @@
 #include <array>
 #include <cstdio>
 
+
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(ANDROID)
+#include <android/log.h>
 #endif
 
 #include "common/assert.h"
@@ -15,6 +18,8 @@
 #include "common/logging/log.h"
 #include "common/logging/text_formatter.h"
 #include "common/string_util.h"
+
+#define TAG "CitraNative"
 
 namespace Log {
 
@@ -55,8 +60,15 @@ void FormatLogMessage(const Entry& entry, char* out_text, size_t text_len) {
 void PrintMessage(const Entry& entry) {
     std::array<char, 4 * 1024> format_buffer;
     FormatLogMessage(entry, format_buffer.data(), format_buffer.size());
+#ifdef ANDROID
+
+    // Android's log level enum are offset by '2' compared to Citras'
+    const int android_log_level = (int)entry.log_level + 2;
+    __android_log_print(android_log_level,TAG,"%s",format_buffer.data());
+#else
     fputs(format_buffer.data(), stderr);
     fputc('\n', stderr);
+#endif
 }
 
 void PrintColoredMessage(const Entry& entry) {
@@ -91,7 +103,7 @@ void PrintColoredMessage(const Entry& entry) {
     }
 
     SetConsoleTextAttribute(console_handle, color);
-#else
+#elif !defined(ANDROID)
 #define ESC "\x1b"
     const char* color = "";
     switch (entry.log_level) {
@@ -124,7 +136,7 @@ void PrintColoredMessage(const Entry& entry) {
 
 #ifdef _WIN32
     SetConsoleTextAttribute(console_handle, original_info.wAttributes);
-#else
+#elif !defined(ANDROID)
     fputs(ESC "[0m", stderr);
 #undef ESC
 #endif
