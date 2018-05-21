@@ -24,6 +24,45 @@
 #include "video_core/renderer_opengl/renderer_opengl.h"
 #include "video_core/video_core.h"
 
+// Workaround for compiling shaders for GL ES
+#ifdef ANDROID
+static const char vertex_shader[] = R"(
+#version 300 es
+
+in vec2 vert_position;
+in vec2 vert_tex_coord;
+out vec2 frag_tex_coord;
+
+// This is a truncated 3x3 matrix for 2D transformations:
+// The upper-left 2x2 submatrix performs scaling/rotation/mirroring.
+// The third column performs translation.
+// The third row could be used for projection, which we don't need in 2D. It hence is assumed to
+// implicitly be [0, 0, 1]
+uniform mat3x2 modelview_matrix;
+
+void main() {
+    // Multiply input position by the rotscale part of the matrix and then manually translate by
+    // the last column. This is equivalent to using a full 3x3 matrix and expanding the vector
+    // to `vec3(vert_position.xy, 1.0)`
+    gl_Position = vec4(mat2(modelview_matrix) * vert_position + modelview_matrix[2], 0.0, 1.0);
+    frag_tex_coord = vert_tex_coord;
+}
+)";
+
+static const char fragment_shader[] = R"(
+#version 300 es
+
+in vec2 frag_tex_coord;
+out vec4 color;
+
+uniform sampler2D color_texture;
+
+void main() {
+    color = texture(color_texture, frag_tex_coord);
+}
+)";
+
+#else
 static const char vertex_shader[] = R"(
 #version 150 core
 
@@ -59,6 +98,7 @@ void main() {
     color = texture(color_texture, frag_tex_coord);
 }
 )";
+#endif
 
 /**
  * Vertex structure that the drawn screen rectangles are composed of.
@@ -301,9 +341,16 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
 
     switch (format) {
     case GPU::Regs::PixelFormat::RGBA8:
-        internal_format = GL_RGBA;
+        internal_format = GL_RGBA8;
         texture.gl_format = GL_RGBA;
-        texture.gl_type = GL_UNSIGNED_INT_8_8_8_8;
+        if(GLAD_GL_ES_VERSION_3_1)
+        {
+            texture.gl_type = GL_UNSIGNED_BYTE;
+        }
+        else
+        {
+            texture.gl_type = GL_UNSIGNED_INT_8_8_8_8;
+        }
         break;
 
     case GPU::Regs::PixelFormat::RGB8:
@@ -312,7 +359,14 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
         // mostly everywhere) for words or half-words.
         // TODO: check how those behave on big-endian processors.
         internal_format = GL_RGB;
-        texture.gl_format = GL_BGR;
+        if(GLAD_GL_ES_VERSION_3_1)
+        {
+            texture.gl_format = GL_RGB;
+        }
+        else
+        {
+            texture.gl_format = GL_BGR;
+        }
         texture.gl_type = GL_UNSIGNED_BYTE;
         break;
 
@@ -478,6 +532,7 @@ bool RendererOpenGL::Init() {
 
     if (GLAD_GL_KHR_debug) {
         glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 
@@ -493,12 +548,11 @@ bool RendererOpenGL::Init() {
     Core::Telemetry().AddField(Telemetry::FieldType::UserSystem, "GPU_Model", gpu_model);
     Core::Telemetry().AddField(Telemetry::FieldType::UserSystem, "GPU_OpenGL_Version", gl_version);
 
-    if (!GLAD_GL_VERSION_3_3) {
+    if (!(GLAD_GL_VERSION_3_3||GLAD_GL_ES_VERSION_3_2)) {
         return false;
     }
 
     InitOpenGLObjects();
-
     RefreshRasterizerSetting();
 
     return true;

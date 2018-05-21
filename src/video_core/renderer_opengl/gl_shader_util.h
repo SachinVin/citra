@@ -16,4 +16,11 @@ namespace GLShader {
  */
 GLuint LoadProgram(const char* vertex_shader, const char* fragment_shader);
 
+
+/**
+ *  Function to find the version string of GLSL corresponding to the GL Version
+ *  @returns The version string of GLSL
+ */
+std::string GetGLSLVersionString();
+
 } // namespace

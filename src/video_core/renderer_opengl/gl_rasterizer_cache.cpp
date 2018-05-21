@@ -24,6 +24,16 @@
 #include "video_core/texture/texture_decode.h"
 #include "video_core/utils.h"
 #include "video_core/video_core.h"
+#include "renderer_opengl.h"
+
+// Since GLES dosent support GL_UNSIGNED_INT_8_8_8_8 or GL_BGR , this will convert them to
+// GL_UNSIGNED_BYTE and GL_RGB respectively.
+#ifdef ANDROID
+#undef GL_UNSIGNED_INT_8_8_8_8
+#define GL_UNSIGNED_INT_8_8_8_8 GL_UNSIGNED_BYTE
+#undef GL_BGR
+#define GL_BGR GL_RGB
+#endif
 
 struct FormatTuple {
     GLint internal_format;
@@ -45,6 +55,80 @@ static const std::array<FormatTuple, 4> depth_format_tuples = {{
     {GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT},   // D24
     {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8}, // D24S8
 }};
+
+/**
+ * OpenGL ES does not support glGetTexImage. Obtain the pixels by attaching the
+ * texture to a framebuffer.
+ * Originally authored by afrantzis for apitrace
+ */
+static inline void
+getTexImageOES(GLenum target, GLint level, GLint height, GLint width, GLubyte *pixels)
+{
+    LOG_INFO(Render_OpenGL,"GLES getTexImageOES Workaround");
+
+    GLint depth = 1; // Since we are only using this for 2D lets ignore the 3D aspect
+    memset(pixels, 0x80, height * width * 4);
+
+    GLenum texture_binding = GL_NONE;
+    switch (target) {
+        case GL_TEXTURE_2D:
+            texture_binding = GL_TEXTURE_BINDING_2D;
+            break;
+        case GL_TEXTURE_CUBE_MAP_POSITIVE_X:
+        case GL_TEXTURE_CUBE_MAP_NEGATIVE_X:
+        case GL_TEXTURE_CUBE_MAP_POSITIVE_Y:
+        case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
+        case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
+        case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
+            texture_binding = GL_TEXTURE_BINDING_CUBE_MAP;
+            break;
+        case GL_TEXTURE_3D_OES:
+            texture_binding = GL_TEXTURE_BINDING_3D_OES;
+        default:
+            return;
+    }
+
+    GLint texture = 0;
+    glGetIntegerv(texture_binding, &texture);
+    if (!texture) {
+        return;
+    }
+
+    GLint prev_fbo = 0;
+    GLuint fbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    GLenum status;
+
+    switch (target) {
+        case GL_TEXTURE_2D:
+        case GL_TEXTURE_CUBE_MAP_POSITIVE_X:
+        case GL_TEXTURE_CUBE_MAP_NEGATIVE_X:
+        case GL_TEXTURE_CUBE_MAP_POSITIVE_Y:
+        case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
+        case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
+        case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, level);
+            status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            if (status != GL_FRAMEBUFFER_COMPLETE) {
+                LOG_ERROR(Render_OpenGL, "%s", status);
+            }
+            glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+            break;
+        case GL_TEXTURE_3D_OES:
+            for (int i = 0; i < depth; i++) {
+                glFramebufferTexture3D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_3D, texture, level, i);
+                glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels + 4 * i * width * height);
+            }
+            break;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, prev_fbo);
+
+    glDeleteFramebuffers(1, &fbo);
+}
 
 RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
     transfer_framebuffers[0].Create();
@@ -354,8 +438,14 @@ CachedSurface* RasterizerCacheOpenGL::GetSurface(const CachedSurface& params, bo
                     }
                 }
 
-                glTexImage2D(GL_TEXTURE_2D, 0, tuple.internal_format, params.width, params.height,
-                             0, GL_RGBA, GL_UNSIGNED_BYTE, tex_buffer.data());
+                if(GLAD_GL_ES_VERSION_3_1 && tuple.internal_format == GL_RGB565) {
+                    glTexImage2D(GL_TEXTURE_2D, 0, tuple.internal_format, params.width,
+                                 params.height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex_buffer.data());
+                }
+                else {
+                    glTexImage2D(GL_TEXTURE_2D, 0, tuple.internal_format, params.width,
+                                 params.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex_buffer.data());
+                }
             } else {
                 // Depth/Stencil formats need special treatment since they aren't sampleable using
                 // LookupTexture and can't use RGBA format
@@ -703,11 +793,16 @@ void RasterizerCacheOpenGL::FlushSurface(CachedSurface* surface) {
 
     if (!surface->is_tiled) {
         // TODO: Ensure this will always be a color format, not a depth or other format
-        ASSERT((size_t)surface->pixel_format < fb_format_tuples.size());
-        const FormatTuple& tuple = fb_format_tuples[(unsigned int)surface->pixel_format];
+        ASSERT((size_t) surface->pixel_format < fb_format_tuples.size());
+        const FormatTuple &tuple = fb_format_tuples[(unsigned int) surface->pixel_format];
 
-        glPixelStorei(GL_PACK_ROW_LENGTH, (GLint)surface->pixel_stride);
-        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, dst_buffer);
+        glPixelStorei(GL_PACK_ROW_LENGTH, (GLint) surface->pixel_stride);
+        if (GLAD_GL_ES_VERSION_3_1) {
+            getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width, dst_buffer);
+        } else {
+            glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, dst_buffer);
+        }
+
         glPixelStorei(GL_PACK_ROW_LENGTH, 0);
     } else {
         SurfaceType type = CachedSurface::GetFormatType(surface->pixel_format);
@@ -719,8 +814,13 @@ void RasterizerCacheOpenGL::FlushSurface(CachedSurface* surface) {
 
             std::vector<u8> temp_gl_buffer(surface->width * surface->height * bytes_per_pixel);
 
-            glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, temp_gl_buffer.data());
-
+            if (GLAD_GL_ES_VERSION_3_1) {
+                getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width,
+                               temp_gl_buffer.data());
+            }
+            else {
+                glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, temp_gl_buffer.data());
+            }
             // Directly copy pixels. Internal OpenGL color formats are consistent so no conversion
             // is necessary.
             MortonCopyPixels(surface->pixel_format, surface->width, surface->height,
@@ -742,7 +842,14 @@ void RasterizerCacheOpenGL::FlushSurface(CachedSurface* surface) {
 
             std::vector<u8> temp_gl_buffer(surface->width * surface->height * gl_bytes_per_pixel);
 
-            glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, temp_gl_buffer.data());
+            if (GLAD_GL_ES_VERSION_3_1) {
+                getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width,
+                               temp_gl_buffer.data());
+            }
+            else {
+                glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, temp_gl_buffer.data());
+            }
+
 
             u8* temp_gl_buffer_ptr = use_4bpp ? temp_gl_buffer.data() + 1 : temp_gl_buffer.data();
 

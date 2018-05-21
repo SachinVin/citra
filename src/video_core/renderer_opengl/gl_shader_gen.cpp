@@ -226,6 +226,7 @@ static std::string SampleTexture(const PicaShaderConfig& config, unsigned textur
         UNREACHABLE();
         return "";
     }
+
 }
 
 /// Writes the specified TEV stage source component(s)
@@ -1047,16 +1048,31 @@ float ProcTexNoiseCoef(vec2 x) {
 std::string GenerateFragmentShader(const PicaShaderConfig& config) {
     const auto& state = config.state;
 
-    std::string out = R"(
-#version 330 core
+    std::string out = GLShader::GetGLSLVersionString();
 
+    out += R"(
+// High precision may or may not supported in GLES3. If it isn't, use medium precision instead
+#ifdef GL_ES
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+precision highp samplerBuffer;
+#else
+precision mediump float;
+precision mediump samplerBuffer;
+#endif // GL_FRAGMENT_PRECISION_HIGH
+#endif // GL_ES
+)";
+
+    out += R"(
 in vec4 primary_color;
 in vec2 texcoord[3];
 in float texcoord0_w;
 in vec4 normquat;
 in vec3 view;
 
+#ifndef GL_ES
 in vec4 gl_FragCoord;
+#endif // GL_ES
 
 out vec4 color;
 
@@ -1085,13 +1101,13 @@ float LookupLightingLUT(int lut_index, int index, float delta) {
 
 float LookupLightingLUTUnsigned(int lut_index, float pos) {
     int index = clamp(int(pos * 256.0), 0, 255);
-    float delta = pos * 256.0 - index;
+    float delta = pos * 256.0 - float(index);
     return LookupLightingLUT(lut_index, index, delta);
 }
 
 float LookupLightingLUTSigned(int lut_index, float pos) {
     int index = clamp(int(pos * 128.0), -128, 127);
-    float delta = pos * 128.0 - index;
+    float delta = pos * 128.0 - float(index);
     if (index < 0) index += 256;
     return LookupLightingLUT(lut_index, index, delta);
 }
@@ -1122,10 +1138,10 @@ vec4 secondary_fragment_color = vec4(0.0);
         // Negate the condition if we have to keep only the pixels outside the scissor box
         if (state.scissor_test_mode == RasterizerRegs::ScissorMode::Include)
             out += "!";
-        out += "(gl_FragCoord.x >= scissor_x1 && "
-               "gl_FragCoord.y >= scissor_y1 && "
-               "gl_FragCoord.x < scissor_x2 && "
-               "gl_FragCoord.y < scissor_y2)) discard;\n";
+        out += "(gl_FragCoord.x >= float(scissor_x1) && "
+               "gl_FragCoord.y >= float(scissor_y1) && "
+               "gl_FragCoord.x < float(scissor_x2) && "
+               "gl_FragCoord.y < float(scissor_y2))) discard;\n";
     }
 
     // After perspective divide, OpenGL transform z_over_w from [-1, 1] to [near, far]. Here we use
@@ -1157,7 +1173,7 @@ vec4 secondary_fragment_color = vec4(0.0);
     if (state.fog_mode == TexturingRegs::FogMode::Fog) {
         // Get index into fog LUT
         if (state.fog_flip) {
-            out += "float fog_index = (1.0 - depth) * 128.0;\n";
+            out += "float fog_index = (1.0 - float(depth)) * 128.0;\n";
         } else {
             out += "float fog_index = depth * 128.0;\n";
         }
@@ -1187,7 +1203,16 @@ vec4 secondary_fragment_color = vec4(0.0);
 }
 
 std::string GenerateVertexShader() {
-    std::string out = "#version 330 core\n";
+
+    std::string out = GLShader::GetGLSLVersionString();
+
+
+    out += R"(
+#ifdef GL_ES
+#extension GL_EXT_clip_cull_distance : enable
+#endif // GL_ES
+)";
+
 
     out += "layout(location = " + std::to_string((int)ATTRIBUTE_POSITION) +
            ") in vec4 vert_position;\n";
