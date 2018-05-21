@@ -21,6 +21,10 @@
 #ifdef _WIN32
 #define EMU_DATA_DIR "Citra"
 #else
+#ifdef ANDROID
+// On Android internal storage is mounted as "/sdcard"
+#define SDCARD_DIR "sdcard"
+#endif
 #define EMU_DATA_DIR "citra-emu"
 #endif
 #endif

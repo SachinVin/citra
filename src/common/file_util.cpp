@@ -698,6 +698,14 @@ const std::string& GetUserPath(const unsigned int DirIDX, const std::string& new
         paths[D_CONFIG_IDX] = paths[D_USER_IDX] + CONFIG_DIR DIR_SEP;
         paths[D_CACHE_IDX] = paths[D_USER_IDX] + CACHE_DIR DIR_SEP;
 #else
+#ifdef ANDROID
+        if(FileUtil::Exists(ROOT_DIR DIR_SEP SDCARD_DIR))
+        {
+            paths[D_USER_IDX] = ROOT_DIR DIR_SEP SDCARD_DIR DIR_SEP EMU_DATA_DIR DIR_SEP;
+            paths[D_CONFIG_IDX] = paths[D_USER_IDX] + CONFIG_DIR DIR_SEP;
+            paths[D_CACHE_IDX] = paths[D_USER_IDX] + CACHE_DIR DIR_SEP;
+        }
+#else
         if (FileUtil::Exists(ROOT_DIR DIR_SEP USERDATA_DIR)) {
             paths[D_USER_IDX] = ROOT_DIR DIR_SEP USERDATA_DIR DIR_SEP;
             paths[D_CONFIG_IDX] = paths[D_USER_IDX] + CONFIG_DIR DIR_SEP;
@@ -711,6 +719,7 @@ const std::string& GetUserPath(const unsigned int DirIDX, const std::string& new
             paths[D_CONFIG_IDX] = config_dir + DIR_SEP EMU_DATA_DIR DIR_SEP;
             paths[D_CACHE_IDX] = cache_dir + DIR_SEP EMU_DATA_DIR DIR_SEP;
         }
+#endif
 #endif
         paths[D_SDMC_IDX] = paths[D_USER_IDX] + SDMC_DIR DIR_SEP;
         paths[D_NAND_IDX] = paths[D_USER_IDX] + NAND_DIR DIR_SEP;
