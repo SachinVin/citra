@@ -26,7 +26,7 @@
 #include "video_core/video_core.h"
 #include "renderer_opengl.h"
 
-// Since GLES dosent support GL_UNSIGNED_INT_8_8_8_8 or GL_BGR , this will convert them to
+// Since GLES dosent support GL_UNSIGNED_INT_8_8_8_8 or GL_BGR , convert them to
 // GL_UNSIGNED_BYTE and GL_RGB respectively.
 #ifdef ANDROID
 #undef GL_UNSIGNED_INT_8_8_8_8
@@ -61,12 +61,10 @@ static const std::array<FormatTuple, 4> depth_format_tuples = {{
  * texture to a framebuffer.
  * Originally authored by afrantzis for apitrace
  */
-static inline void
-getTexImageOES(GLenum target, GLint level, GLint height, GLint width, GLubyte *pixels)
+static inline void getTexImageOES(GLenum target, GLint level, GLint height, GLint width,
+                                  GLint depth, GLubyte *pixels)
 {
-    LOG_INFO(Render_OpenGL,"GLES getTexImageOES Workaround");
 
-    GLint depth = 1; // Since we are only using this for 2D lets ignore the 3D aspect
     memset(pixels, 0x80, height * width * 4);
 
     GLenum texture_binding = GL_NONE;
@@ -110,7 +108,8 @@ getTexImageOES(GLenum target, GLint level, GLint height, GLint width, GLubyte *p
         case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
         case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
         case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, level);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture,
+                                   level);
             status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             if (status != GL_FRAMEBUFFER_COMPLETE) {
                 LOG_ERROR(Render_OpenGL, "%s", status);
@@ -119,8 +118,10 @@ getTexImageOES(GLenum target, GLint level, GLint height, GLint width, GLubyte *p
             break;
         case GL_TEXTURE_3D_OES:
             for (int i = 0; i < depth; i++) {
-                glFramebufferTexture3D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_3D, texture, level, i);
-                glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels + 4 * i * width * height);
+                glFramebufferTexture3D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_3D, texture,
+                                       level, i);
+                glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE,
+                             pixels + 4 * i * width * height);
             }
             break;
     }
@@ -797,8 +798,9 @@ void RasterizerCacheOpenGL::FlushSurface(CachedSurface* surface) {
         const FormatTuple &tuple = fb_format_tuples[(unsigned int) surface->pixel_format];
 
         glPixelStorei(GL_PACK_ROW_LENGTH, (GLint) surface->pixel_stride);
+
         if (GLAD_GL_ES_VERSION_3_1) {
-            getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width, dst_buffer);
+            getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width, 1, dst_buffer);
         } else {
             glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, dst_buffer);
         }
@@ -815,7 +817,7 @@ void RasterizerCacheOpenGL::FlushSurface(CachedSurface* surface) {
             std::vector<u8> temp_gl_buffer(surface->width * surface->height * bytes_per_pixel);
 
             if (GLAD_GL_ES_VERSION_3_1) {
-                getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width,
+                getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width, 1,
                                temp_gl_buffer.data());
             }
             else {
@@ -843,10 +845,9 @@ void RasterizerCacheOpenGL::FlushSurface(CachedSurface* surface) {
             std::vector<u8> temp_gl_buffer(surface->width * surface->height * gl_bytes_per_pixel);
 
             if (GLAD_GL_ES_VERSION_3_1) {
-                getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width,
+                getTexImageOES(GL_TEXTURE_2D, 0, surface->height, surface->width, 1,
                                temp_gl_buffer.data());
-            }
-            else {
+            }            else {
                 glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, temp_gl_buffer.data());
             }
 

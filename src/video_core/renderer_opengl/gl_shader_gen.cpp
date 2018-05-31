@@ -226,7 +226,6 @@ static std::string SampleTexture(const PicaShaderConfig& config, unsigned textur
         UNREACHABLE();
         return "";
     }
-
 }
 
 /// Writes the specified TEV stage source component(s)

@@ -97,18 +97,18 @@ GLuint LoadProgram(const char* vertex_shader, const char* fragment_shader) {
     return program_id;
 }
 
-std::string GetGLSLVersionString()
-{
+std::string GetGLSLVersionString() {
     std::string ver;
-    if(GLAD_GL_ES_VERSION_3_2)      ver = "#version 320 es\n";
-    else if(GLAD_GL_ES_VERSION_3_1) ver = "#version 310 es\n";
-    else if(GLAD_GL_ES_VERSION_3_0) ver = "#version 300 es\n";
-    else if(GLAD_GL_VERSION_3_3)    ver = "#version 330\n";
-    else if(GLAD_GL_VERSION_3_2)    ver = "#version 150\n";
-    else if(GLAD_GL_VERSION_3_1)    ver = "#version 140\n";
+
+    if (GLAD_GL_ES_VERSION_3_2)      { ver = "#version 320 es\n"; }
+    else if (GLAD_GL_ES_VERSION_3_1) { ver = "#version 310 es\n"; }
+    else if (GLAD_GL_ES_VERSION_3_0) { ver = "#version 300 es\n"; }
+    else if (GLAD_GL_VERSION_3_3)    { ver = "#version 330\n";    }
+    else if (GLAD_GL_VERSION_3_2)    { ver = "#version 150\n";    }
+    else if (GLAD_GL_VERSION_3_1)    { ver = "#version 140\n";    }
 
    //Lower versions arent supported
-    else                            ver = "#version ERROR\n";
+    else                             { ver = "#version ERROR\n";  }
 
     return ver;
 }
