@@ -4,8 +4,8 @@
 
 #include <memory>
 #include <inih/cpp/INIReader.h>
-#include "citra/config.h"
-#include "citra/default_ini.h"
+#include "config.h"
+#include "default_ini.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/param_package.h"

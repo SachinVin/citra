@@ -1,10 +1,9 @@
 add_subdirectory(ndk_helper)
 
 add_library(main SHARED
-    #ButtonManager.cpp
-    #MainAndroid.cpp
     config.cpp
     config.h
+    default_ini.h
     emu_window/emu_window.cpp
     emu_window/emu_window.h
     native.cpp
