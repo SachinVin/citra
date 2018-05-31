@@ -112,7 +112,7 @@ static inline void getTexImageOES(GLenum target, GLint level, GLint height, GLin
                                    level);
             status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             if (status != GL_FRAMEBUFFER_COMPLETE) {
-                LOG_ERROR(Render_OpenGL, "%s", status);
+                LOG_ERROR(Render_OpenGL, "%d", status);
             }
             glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
             break;
