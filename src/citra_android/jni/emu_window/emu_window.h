@@ -27,7 +27,7 @@ public:
     /// Releases the GL context from the caller thread
     void DoneCurrent() override;
 
-    /// Accessed by the onSurfaceChanges() and onSurfaceDestroyed() methods to change the surface
+    /// Called by the onSurfaceChanges() method to change the surface
     void OnSurfaceChanged(ANativeWindow* surface);
 
 

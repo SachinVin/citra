@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <inih/cpp/INIReader.h>
+#include "button_manager.h"
 #include "config.h"
 #include "default_ini.h"
 #include "common/file_util.h"
@@ -41,25 +42,22 @@ bool Config::LoadINI(const std::string& default_contents, bool retry) {
 }
 
 static const std::array<int, Settings::NativeButton::NumButtons> default_buttons = {
-  /*  SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_Z, SDL_SCANCODE_X, SDL_SCANCODE_T,
-    SDL_SCANCODE_G, SDL_SCANCODE_F, SDL_SCANCODE_H, SDL_SCANCODE_Q, SDL_SCANCODE_W,
-    SDL_SCANCODE_M, SDL_SCANCODE_N, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_B,
-  */
+    InputManager::N3DS_BUTTON_A, InputManager::N3DS_BUTTON_B, InputManager::N3DS_BUTTON_X,
+    InputManager::N3DS_BUTTON_Y, InputManager::N3DS_DPAD_UP, InputManager::N3DS_DPAD_DOWN,
+    InputManager::N3DS_DPAD_LEFT, InputManager::N3DS_DPAD_RIGHT, InputManager::N3DS_TRIGGER_L,
+    InputManager::N3DS_TRIGGER_R, InputManager::N3DS_BUTTON_START,
+    InputManager::N3DS_BUTTON_SELECT, InputManager::N3DS_BUTTON_ZL, InputManager::N3DS_BUTTON_ZR,
+    InputManager::N3DS_BUTTON_HOME,
 };
 
-static const std::array<std::array<int, 5>, Settings::NativeAnalog::NumAnalogs> default_analogs{{
-    {
-       // SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_D,
-    },
-    {
-       // SDL_SCANCODE_I, SDL_SCANCODE_K, SDL_SCANCODE_J, SDL_SCANCODE_L, SDL_SCANCODE_D,
-    },
+static const std::array<int, Settings::NativeAnalog::NumAnalogs> default_analogs{{
+    InputManager::N3DS_CIRCLEPAD, InputManager::N3DS_STICK_C,
 }};
 
 void Config::ReadValues() {
     // Controls
     for (int i = 0; i < Settings::NativeButton::NumButtons; ++i) {
-        std::string default_param = InputCommon::GenerateKeyboardParam(default_buttons[i]);
+        std::string default_param = InputManager::GenerateButtonParamPackage(default_buttons[i]);
         Settings::values.buttons[i] =
             sdl2_config->Get("Controls", Settings::NativeButton::mapping[i], default_param);
         if (Settings::values.buttons[i].empty())
@@ -67,9 +65,7 @@ void Config::ReadValues() {
     }
 
     for (int i = 0; i < Settings::NativeAnalog::NumAnalogs; ++i) {
-        std::string default_param = InputCommon::GenerateAnalogParamFromKeys(
-            default_analogs[i][0], default_analogs[i][1], default_analogs[i][2],
-            default_analogs[i][3], default_analogs[i][4], 0.5f);
+        std::string default_param = InputManager::GenerateAnalogParamPackage(default_analogs[i]);
         Settings::values.analogs[i] =
             sdl2_config->Get("Controls", Settings::NativeAnalog::mapping[i], default_param);
         if (Settings::values.analogs[i].empty())

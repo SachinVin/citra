@@ -35,7 +35,8 @@ JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_onGamePadMove
                                                                                       jobject obj,
                                                                                       jstring jDevice,
                                                                                       jint Axis,
-                                                                                      jfloat Value);
+                                                                                      jfloat x,
+                                                                                      jfloat y);
 
 JNIEXPORT jintArray JNICALL Java_org_citra_citra_1android_NativeLibrary_GetBanner(JNIEnv *env,
                                                                                   jobject obj,

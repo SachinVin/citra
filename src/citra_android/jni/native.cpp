@@ -4,9 +4,8 @@
 #include <string>
 #include <thread>
 
-#include<jni.h>
-#include <queue>
 #include <android/native_window_jni.h>
+#include <jni.h>
 
 #include "citra/config.h"
 #include "common/file_util.h"
@@ -26,8 +25,11 @@
 #include "core/loader/smdh.h"
 #include "core/settings.h"
 #include "emu_window/emu_window.h"
+#include "input_common/keyboard.h"
+#include "input_common/main.h"
 #include "network/network.h"
 #include "native.h"
+#include "button_manager.h"
 
 JavaVM *g_java_vm;
 
@@ -124,13 +126,13 @@ static int RunCitra(const std::string &path) {
     Settings::values.movie_record = std::move(movie_record);
     Settings::Apply();
 
-    std::unique_ptr<EmuWindow_Android> emu_window{std::make_unique<EmuWindow_Android>(s_surf)};
-    Core::System &system{Core::System::GetInstance()};
+    InputManager::Init();
     emu = new EmuWindow_Android(s_surf);
-
+    Core::System &system{Core::System::GetInstance()};
 
     SCOPE_EXIT({
                    system.Shutdown();
+                   InputManager::Shutdown();
                    emu->~EmuWindow_Android();
                });
 
@@ -246,15 +248,24 @@ jboolean Java_org_citra_citra_1android_NativeLibrary_IsRunning(JNIEnv *env, jobj
 }
 
 jboolean Java_org_citra_citra_1android_NativeLibrary_onGamePadEvent(JNIEnv *env, jobject obj,
-                                                                    jstring jDevice, jint Button,
-                                                                    jint Action) {
-    return 0;
+                                                                    jstring jDevice, jint button,
+                                                                    jint pressed) {
+    if (pressed) {
+        InputManager::ButtonHandler()->PressKey(button);
+    }
+    else {
+        InputManager::ButtonHandler()->ReleaseKey(button);
+    }
+
+    return static_cast<jboolean>(true);
 }
 
 void Java_org_citra_citra_1android_NativeLibrary_onGamePadMoveEvent(JNIEnv *env, jobject obj,
                                                                     jstring jDevice, jint Axis,
-                                                                    jfloat Value) {
-
+                                                                    jfloat x, jfloat y) {
+    // Citra uses an inverted y axis sent by the frontend
+    y =-y;
+    InputManager::AnalogHandler()->MoveJoystick(Axis, x, y);
 }
 
 jintArray Java_org_citra_citra_1android_NativeLibrary_GetBanner(JNIEnv *env, jobject obj,
@@ -494,12 +505,9 @@ void Java_org_citra_citra_1android_NativeLibrary_RefreshWiimotes(JNIEnv *env, jc
 
 jint Java_org_citra_citra_1android_NativeLibrary_GetPlatform(JNIEnv *env, jclass type,
                                                              jstring filename_) {
-    const char *filename = env->GetStringUTFChars(filename_, 0);
-
-    env->ReleaseStringUTFChars(filename_, filename);
 
     // Return 1 and let the frontend think the game is a wii game,
-    // this lets us use the classic controller on the wii
+    // this lets us use the all the controllers
     return 1;
 }
 

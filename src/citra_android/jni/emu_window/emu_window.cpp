@@ -34,7 +34,6 @@ void EmuWindow_Android::OnFramebufferSizeChanged() {
 EmuWindow_Android::EmuWindow_Android(ANativeWindow* surface) {
     LOG_DEBUG(Frontend, "Initializing Emuwindow");
 
-    InputCommon::Init();
     Network::Init();
     gl_context = ndk_helper::GLContext::GetInstance();
     render_window = surface;
@@ -54,9 +53,7 @@ EmuWindow_Android::EmuWindow_Android(ANativeWindow* surface) {
 
 EmuWindow_Android::~EmuWindow_Android() {
     gl_context->Invalidate();
-
     Network::Shutdown();
-    InputCommon::Shutdown();
 }
 
 void EmuWindow_Android::SwapBuffers() {

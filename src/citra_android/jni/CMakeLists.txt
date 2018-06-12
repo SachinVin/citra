@@ -1,6 +1,8 @@
 add_subdirectory(ndk_helper)
 
 add_library(main SHARED
+    button_manager.cpp
+    button_manager.h
     config.cpp
     config.h
     default_ini.h

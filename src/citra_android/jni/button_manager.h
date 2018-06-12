@@ -6,11 +6,13 @@
 
 #include <map>
 #include <string>
+#include <memory>
+#include "core/frontend/input.h"
 
-namespace ButtonManager
-{
-enum ButtonType
-{
+namespace InputManager{
+
+
+enum ButtonType{
   // GC
   BUTTON_A = 0,
   BUTTON_B = 1,
@@ -176,82 +178,109 @@ enum ButtonType
   TURNTABLE_CROSSFADE = 622,  // To Be Used on Java Side
   TURNTABLE_CROSSFADE_LEFT = 623,
   TURNTABLE_CROSSFADE_RIGHT = 624,
+  // 3DS Controls
+  N3DS_BUTTON_A = 700,
+  N3DS_BUTTON_B = 701,
+  N3DS_BUTTON_X = 702,
+  N3DS_BUTTON_Y = 703,
+  N3DS_BUTTON_START = 704,
+  N3DS_BUTTON_SELECT = 705,
+  N3DS_BUTTON_HOME = 706,
+  N3DS_BUTTON_ZL = 707,
+  N3DS_BUTTON_ZR = 708,
+  N3DS_DPAD_UP = 709,
+  N3DS_DPAD_DOWN = 710,
+  N3DS_DPAD_LEFT = 711,
+  N3DS_DPAD_RIGHT = 712,
+  N3DS_CIRCLEPAD = 713,
+  N3DS_CIRCLEPAD_UP = 714,
+  N3DS_CIRCLEPAD_DOWN = 715,
+  N3DS_CIRCLEPAD_LEFT = 716,
+  N3DS_CIRCLEPAD_RIGHT = 717,
+  N3DS_STICK_C = 718,
+  N3DS_STICK_C_UP = 719,
+  N3DS_STICK_C_DOWN = 720,
+  N3DS_STICK_C_LEFT = 771,
+  N3DS_STICK_C_RIGHT = 772,
+  N3DS_TRIGGER_L = 773,
+  N3DS_TRIGGER_R = 774,
 };
-enum ButtonState
-{
-  BUTTON_RELEASED = 0,
-  BUTTON_PRESSED = 1
-};
-enum BindType
-{
-  BIND_BUTTON = 0,
-  BIND_AXIS
-};
-class Button
-{
-private:
-  ButtonState m_state;
 
+class ButtonList;
+/**
+ * A button device factory representing a gamepad. It receives input events and forward them
+ * to all button devices it created.
+ */
+class ButtonFactory final : public Input::Factory<Input::ButtonDevice> {
 public:
-  Button() : m_state(BUTTON_RELEASED) {}
-  void SetState(ButtonState state) { m_state = state; }
-  bool Pressed() { return m_state == BUTTON_PRESSED; }
-  ~Button() {}
-};
-class Axis
-{
+    ButtonFactory();
+
+    /**
+     * Creates a button device from a gamepad button
+     * @param params contains parameters for creating the device:
+     *     - "code": the code of the key to bind with the button
+     */
+    std::unique_ptr<Input::ButtonDevice> Create(const Common::ParamPackage& params) override;
+
+    /**
+     * Sets the status of all buttons bound with the key to pressed
+     * @param key_code the code of the key to press
+     */
+    void PressKey(int button_id);
+
+    /**
+     * Sets the status of all buttons bound with the key to released
+     * @param key_code the code of the key to release
+     */
+    void ReleaseKey(int key_code);
+
+    void ReleaseAllKeys();
+
 private:
-  float m_value;
+    std::shared_ptr<ButtonList> button_list;
+};
 
+class AnalogList;
+/**
+ * An analog device factory representing a gamepad(virtual or physical). It receives input events and forward them
+ * to all analog devices it created.
+ */
+class AnalogFactory final : public Input::Factory<Input::AnalogDevice> {
 public:
-  Axis() : m_value(0.0f) {}
-  void SetValue(float value) { m_value = value; }
-  float AxisValue() { return m_value; }
-  ~Axis() {}
-};
+    AnalogFactory();
 
-struct sBind
-{
-  const int _padID;
-  const ButtonType _buttontype;
-  const BindType _bindtype;
-  const int _bind;
-  const float _neg;
-  sBind(int padID, ButtonType buttontype, BindType bindtype, int bind, float neg)
-      : _padID(padID), _buttontype(buttontype), _bindtype(bindtype), _bind(bind), _neg(neg)
-  {
-  }
-};
+    /**
+     * Creates an analog device from the gamepad joystick
+     * @param params contains parameters for creating the device:
+     *     - "code": the code of the key to bind with the button
+     */
+    std::unique_ptr<Input::AnalogDevice> Create(const Common::ParamPackage& params) override;
 
-class InputDevice
-{
+    /**
+     * Sets the status of all buttons bound with the key to pressed
+     * @param key_code the code of the analog stick
+     * @param x the x-axis value of the analog stick
+     * @param y the y-axis value of the analog stick
+     */
+    void MoveJoystick(int analog_id, float x, float y);
+
 private:
-  const std::string _dev;
-  std::map<ButtonType, bool> _buttons;
-  std::map<ButtonType, float> _axises;
-
-  // Key is padID and ButtonType
-  std::map<std::pair<int, ButtonType>, sBind*> _inputbinds;
-
-public:
-  InputDevice(std::string dev) : _dev(dev) {}
-  ~InputDevice()
-  {
-    for (const auto& bind : _inputbinds)
-      delete bind.second;
-    _inputbinds.clear();
-  }
-  void AddBind(sBind* bind) { _inputbinds[std::make_pair(bind->_padID, bind->_buttontype)] = bind; }
-  bool PressEvent(int button, int action);
-  void AxisEvent(int axis, float value);
-  bool ButtonValue(int padID, ButtonType button);
-  float AxisValue(int padID, ButtonType axis);
+    std::shared_ptr<AnalogList> analog_list;
 };
 
+/// Initializes and registers all built-in input device factories.
 void Init();
-bool GetButtonPressed(int padID, ButtonType button);
-float GetAxisValue(int padID, ButtonType axis);
-bool GamepadEvent(const std::string& dev, int button, int action);
-void GamepadAxisEvent(const std::string& dev, int axis, float value);
+
+/// Deregisters all built-in input device factories and shuts them down.
 void Shutdown();
+
+/// Gets the gamepad button device factory.
+ButtonFactory* ButtonHandler();
+
+/// Gets the gamepad analog device factory.
+AnalogFactory* AnalogHandler();
+
+std::string GenerateButtonParamPackage(int type);
+
+std::string GenerateAnalogParamPackage(int type);
 }
