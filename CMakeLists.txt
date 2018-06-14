@@ -156,16 +156,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_definitions(-D_FILE_OFFSET_BITS=64)
 endif()
 
-if(ANDROID)
-    message(STATUS "Building for Android")
-
-    # We are cross compiling, search only the toolchain for libraries and includes
-    SET(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-    SET(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-    SET(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-    SET(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
-endif()
-
 add_definitions(-DSINGLETHREADED)
 # CMake seems to only define _DEBUG on Windows
 set_property(DIRECTORY APPEND PROPERTY
