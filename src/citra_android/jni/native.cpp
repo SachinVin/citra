@@ -505,10 +505,7 @@ void Java_org_citra_citra_1android_NativeLibrary_RefreshWiimotes(JNIEnv *env, jc
 
 jint Java_org_citra_citra_1android_NativeLibrary_GetPlatform(JNIEnv *env, jclass type,
                                                              jstring filename_) {
-
-    // Return 1 and let the frontend think the game is a wii game,
-    // this lets us use the all the controllers
-    return 1;
+    return 0;
 }
 
 void Java_org_citra_citra_1android_services_DirectoryInitializationService_SetSysDirectory(
