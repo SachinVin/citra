@@ -2,7 +2,6 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include <cinttypes>
 #include <cmath>
 #include <cstring>
 #include "common/bit_set.h"
@@ -30,7 +29,7 @@ void OutputVertex::ValidateSemantics(const RasterizerRegs& regs) {
         for (size_t comp = 0; comp < 4; ++comp) {
             u32 semantic = (output_register_map >> (8 * comp)) & 0x1F;
             ASSERT_MSG(semantic < 24 || semantic == RasterizerRegs::VSOutputAttributes::INVALID,
-                       "Invalid/unknown semantic id: %" PRIu32, semantic);
+                       "Invalid/unknown semantic id: {}", semantic);
         }
     }
 }
@@ -66,8 +65,9 @@ OutputVertex OutputVertex::FromAttributeBuffer(const RasterizerRegs& regs,
         ret.color[i] = float24::FromFloat32(c < 1.0f ? c : 1.0f);
     }
 
-    LOG_TRACE(HW_GPU, "Output vertex: pos(%.2f, %.2f, %.2f, %.2f), quat(%.2f, %.2f, %.2f, %.2f), "
-                      "col(%.2f, %.2f, %.2f, %.2f), tc0(%.2f, %.2f), view(%.2f, %.2f, %.2f)",
+    LOG_TRACE(HW_GPU,
+              "Output vertex: pos(%.2f, %.2f, %.2f, %.2f), quat(%.2f, %.2f, %.2f, %.2f), "
+              "col(%.2f, %.2f, %.2f, %.2f), tc0(%.2f, %.2f), view(%.2f, %.2f, %.2f)",
               ret.pos.x.ToFloat32(), ret.pos.y.ToFloat32(), ret.pos.z.ToFloat32(),
               ret.pos.w.ToFloat32(), ret.quat.x.ToFloat32(), ret.quat.y.ToFloat32(),
               ret.quat.z.ToFloat32(), ret.quat.w.ToFloat32(), ret.color.x.ToFloat32(),

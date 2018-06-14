@@ -5,6 +5,7 @@
 #pragma once
 
 #include <utility>
+#include <vector>
 #include <glad/glad.h>
 #include "common/common_types.h"
 #include "video_core/renderer_opengl/gl_shader_util.h"
@@ -13,14 +14,16 @@
 class OGLTexture : private NonCopyable {
 public:
     OGLTexture() = default;
-    OGLTexture(OGLTexture&& o) {
-        std::swap(handle, o.handle);
-    }
+
+    OGLTexture(OGLTexture&& o) : handle(std::exchange(o.handle, 0)) {}
+
     ~OGLTexture() {
         Release();
     }
+
     OGLTexture& operator=(OGLTexture&& o) {
-        std::swap(handle, o.handle);
+        Release();
+        handle = std::exchange(o.handle, 0);
         return *this;
     }
 
@@ -36,7 +39,7 @@ public:
         if (handle == 0)
             return;
         glDeleteTextures(1, &handle);
-        OpenGLState::ResetTexture(handle);
+        OpenGLState::GetCurState().ResetTexture(handle).Apply();
         handle = 0;
     }
 
@@ -46,14 +49,16 @@ public:
 class OGLSampler : private NonCopyable {
 public:
     OGLSampler() = default;
-    OGLSampler(OGLSampler&& o) {
-        std::swap(handle, o.handle);
-    }
+
+    OGLSampler(OGLSampler&& o) : handle(std::exchange(o.handle, 0)) {}
+
     ~OGLSampler() {
         Release();
     }
+
     OGLSampler& operator=(OGLSampler&& o) {
-        std::swap(handle, o.handle);
+        Release();
+        handle = std::exchange(o.handle, 0);
         return *this;
     }
 
@@ -69,7 +74,7 @@ public:
         if (handle == 0)
             return;
         glDeleteSamplers(1, &handle);
-        OpenGLState::ResetSampler(handle);
+        OpenGLState::GetCurState().ResetSampler(handle).Apply();
         handle = 0;
     }
 
@@ -79,22 +84,66 @@ public:
 class OGLShader : private NonCopyable {
 public:
     OGLShader() = default;
-    OGLShader(OGLShader&& o) {
-        std::swap(handle, o.handle);
-    }
+
+    OGLShader(OGLShader&& o) : handle(std::exchange(o.handle, 0)) {}
+
     ~OGLShader() {
         Release();
     }
+
     OGLShader& operator=(OGLShader&& o) {
-        std::swap(handle, o.handle);
+        Release();
+        handle = std::exchange(o.handle, 0);
         return *this;
     }
 
-    /// Creates a new internal OpenGL resource and stores the handle
-    void Create(const char* vert_shader, const char* frag_shader) {
+    void Create(const char* source, GLenum type) {
         if (handle != 0)
             return;
-        handle = GLShader::LoadProgram(vert_shader, frag_shader);
+        if (source == nullptr)
+            return;
+        handle = GLShader::LoadShader(source, type);
+    }
+
+    void Release() {
+        if (handle == 0)
+            return;
+        glDeleteShader(handle);
+        handle = 0;
+    }
+
+    GLuint handle = 0;
+};
+
+class OGLProgram : private NonCopyable {
+public:
+    OGLProgram() = default;
+
+    OGLProgram(OGLProgram&& o) : handle(std::exchange(o.handle, 0)) {}
+
+    ~OGLProgram() {
+        Release();
+    }
+
+    OGLProgram& operator=(OGLProgram&& o) {
+        Release();
+        handle = std::exchange(o.handle, 0);
+        return *this;
+    }
+
+    /// Creates a new program from given shader objects
+    void Create(bool separable_program, const std::vector<GLuint>& shaders) {
+        if (handle != 0)
+            return;
+        handle = GLShader::LoadProgram(separable_program, shaders);
+    }
+
+    /// Creates a new program from given shader soruce code
+    void Create(const char* vert_shader, const char* frag_shader) {
+        OGLShader vert, frag;
+        vert.Create(vert_shader, GL_VERTEX_SHADER);
+        frag.Create(frag_shader, GL_FRAGMENT_SHADER);
+        Create(false, {vert.handle, frag.handle});
     }
 
     /// Deletes the internal OpenGL resource
@@ -102,7 +151,39 @@ public:
         if (handle == 0)
             return;
         glDeleteProgram(handle);
-        OpenGLState::ResetProgram(handle);
+        OpenGLState::GetCurState().ResetProgram(handle).Apply();
+        handle = 0;
+    }
+
+    GLuint handle = 0;
+};
+
+class OGLPipeline : private NonCopyable {
+public:
+    OGLPipeline() = default;
+    OGLPipeline(OGLPipeline&& o) {
+        handle = std::exchange<GLuint>(o.handle, 0);
+    }
+    ~OGLPipeline() {
+        Release();
+    }
+    OGLPipeline& operator=(OGLPipeline&& o) {
+        Release();
+        handle = std::exchange<GLuint>(o.handle, 0);
+        return *this;
+    }
+
+    void Create() {
+        if (handle != 0)
+            return;
+        glGenProgramPipelines(1, &handle);
+    }
+
+    void Release() {
+        if (handle == 0)
+            return;
+        glDeleteProgramPipelines(1, &handle);
+        OpenGLState::GetCurState().ResetPipeline(handle).Apply();
         handle = 0;
     }
 
@@ -112,14 +193,16 @@ public:
 class OGLBuffer : private NonCopyable {
 public:
     OGLBuffer() = default;
-    OGLBuffer(OGLBuffer&& o) {
-        std::swap(handle, o.handle);
-    }
+
+    OGLBuffer(OGLBuffer&& o) : handle(std::exchange(o.handle, 0)) {}
+
     ~OGLBuffer() {
         Release();
     }
+
     OGLBuffer& operator=(OGLBuffer&& o) {
-        std::swap(handle, o.handle);
+        Release();
+        handle = std::exchange(o.handle, 0);
         return *this;
     }
 
@@ -135,7 +218,7 @@ public:
         if (handle == 0)
             return;
         glDeleteBuffers(1, &handle);
-        OpenGLState::ResetBuffer(handle);
+        OpenGLState::GetCurState().ResetBuffer(handle).Apply();
         handle = 0;
     }
 
@@ -145,14 +228,16 @@ public:
 class OGLVertexArray : private NonCopyable {
 public:
     OGLVertexArray() = default;
-    OGLVertexArray(OGLVertexArray&& o) {
-        std::swap(handle, o.handle);
-    }
+
+    OGLVertexArray(OGLVertexArray&& o) : handle(std::exchange(o.handle, 0)) {}
+
     ~OGLVertexArray() {
         Release();
     }
+
     OGLVertexArray& operator=(OGLVertexArray&& o) {
-        std::swap(handle, o.handle);
+        Release();
+        handle = std::exchange(o.handle, 0);
         return *this;
     }
 
@@ -168,7 +253,7 @@ public:
         if (handle == 0)
             return;
         glDeleteVertexArrays(1, &handle);
-        OpenGLState::ResetVertexArray(handle);
+        OpenGLState::GetCurState().ResetVertexArray(handle).Apply();
         handle = 0;
     }
 
@@ -178,14 +263,16 @@ public:
 class OGLFramebuffer : private NonCopyable {
 public:
     OGLFramebuffer() = default;
-    OGLFramebuffer(OGLFramebuffer&& o) {
-        std::swap(handle, o.handle);
-    }
+
+    OGLFramebuffer(OGLFramebuffer&& o) : handle(std::exchange(o.handle, 0)) {}
+
     ~OGLFramebuffer() {
         Release();
     }
+
     OGLFramebuffer& operator=(OGLFramebuffer&& o) {
-        std::swap(handle, o.handle);
+        Release();
+        handle = std::exchange(o.handle, 0);
         return *this;
     }
 
@@ -201,7 +288,7 @@ public:
         if (handle == 0)
             return;
         glDeleteFramebuffers(1, &handle);
-        OpenGLState::ResetFramebuffer(handle);
+        OpenGLState::GetCurState().ResetFramebuffer(handle).Apply();
         handle = 0;
     }
 

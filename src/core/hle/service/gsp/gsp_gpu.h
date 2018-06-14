@@ -196,6 +196,8 @@ public:
     GSP_GPU();
     ~GSP_GPU() = default;
 
+    void ClientDisconnected(Kernel::SharedPtr<Kernel::ServerSession> server_session) override;
+
     /**
      * Signals that the specified interrupt type has occurred to userland code
      * @param interrupt_id ID of interrupt that is being signalled
@@ -335,6 +337,12 @@ private:
     void ReleaseRight(Kernel::HLERequestContext& ctx);
 
     /**
+     * Releases rights to the GPU.
+     * Will fail if the session_data doesn't have the GPU right
+     */
+    void ReleaseRight(SessionData* session_data);
+
+    /**
      * GSP_GPU::ImportDisplayCaptureInfo service function
      *
      * Returns information about the current framebuffer state
@@ -370,6 +378,9 @@ private:
      *      1 : Result of function, 0 on success, otherwise error code
      */
     void StoreDataCache(Kernel::HLERequestContext& ctx);
+
+    /// Force the 3D LED State (0 = On, Non-Zero = Off)
+    void SetLedForceOff(Kernel::HLERequestContext& ctx);
 
     /// Returns the session data for the specified registered thread id, or nullptr if not found.
     SessionData* FindRegisteredThreadData(u32 thread_id);

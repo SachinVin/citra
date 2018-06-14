@@ -4,11 +4,15 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <vector>
 #include "audio_core/null_sink.h"
 #include "audio_core/sink_details.h"
 #ifdef HAVE_SDL2
 #include "audio_core/sdl2_sink.h"
+#endif
+#ifdef HAVE_CUBEB
+#include "audio_core/cubeb_sink.h"
 #endif
 #include "common/logging/log.h"
 
@@ -16,6 +20,9 @@ namespace AudioCore {
 
 // g_sink_details is ordered in terms of desirability, with the best choice at the top.
 const std::vector<SinkDetails> g_sink_details = {
+#ifdef HAVE_CUBEB
+    {"cubeb", []() { return std::make_unique<CubebSink>(); }},
+#endif
 #ifdef HAVE_SDL2
     {"sdl2", []() { return std::make_unique<SDL2Sink>(); }},
 #endif
@@ -29,7 +36,7 @@ const SinkDetails& GetSinkDetails(std::string sink_id) {
 
     if (sink_id == "auto" || iter == g_sink_details.end()) {
         if (sink_id != "auto") {
-            LOG_ERROR(Audio, "AudioCore::SelectSink given invalid sink_id %s", sink_id.c_str());
+            NGLOG_ERROR(Audio, "AudioCore::SelectSink given invalid sink_id {}", sink_id);
         }
         // Auto-select.
         // g_sink_details is ordered in terms of desirability, with the best choice at the front.

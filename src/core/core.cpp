@@ -4,7 +4,8 @@
 
 #include <memory>
 #include <utility>
-#include "audio_core/audio_core.h"
+#include "audio_core/dsp_interface.h"
+#include "audio_core/hle/hle.h"
 #include "common/logging/log.h"
 #include "core/arm/arm_interface.h"
 #ifdef ARCHITECTURE_x86_64
@@ -14,10 +15,12 @@
 #include "core/core.h"
 #include "core/core_timing.h"
 #include "core/gdbstub/gdbstub.h"
+#include "core/hle/kernel/client_port.h"
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/thread.h"
 #include "core/hle/service/service.h"
+#include "core/hle/service/sm/sm.h"
 #include "core/hw/hw.h"
 #include "core/loader/loader.h"
 #include "core/memory_setup.h"
@@ -149,6 +152,8 @@ void System::Reschedule() {
 System::ResultStatus System::Init(EmuWindow* emu_window, u32 system_mode) {
     LOG_DEBUG(HW_Memory, "initialized OK");
 
+    CoreTiming::Init();
+
     if (Settings::values.use_cpu_jit) {
 #ifdef ARCHITECTURE_x86_64
         cpu_core = std::make_unique<ARM_Dynarmic>(USER32MODE);
@@ -160,13 +165,16 @@ System::ResultStatus System::Init(EmuWindow* emu_window, u32 system_mode) {
         cpu_core = std::make_unique<ARM_DynCom>(USER32MODE);
     }
 
-    telemetry_session = std::make_unique<Core::TelemetrySession>();
+    dsp_core = std::make_unique<AudioCore::DspHle>();
+    dsp_core->SetSink(Settings::values.sink_id);
+    dsp_core->EnableStretching(Settings::values.enable_audio_stretching);
 
-    CoreTiming::Init();
+    telemetry_session = std::make_unique<Core::TelemetrySession>();
+    service_manager = std::make_shared<Service::SM::ServiceManager>();
+
     HW::Init();
     Kernel::Init(system_mode);
-    Service::Init();
-    AudioCore::Init();
+    Service::Init(service_manager);
     GDBStub::Init();
     Movie::GetInstance().Init();
 
@@ -183,6 +191,14 @@ System::ResultStatus System::Init(EmuWindow* emu_window, u32 system_mode) {
     return ResultStatus::Success;
 }
 
+Service::SM::ServiceManager& System::ServiceManager() {
+    return *service_manager;
+}
+
+const Service::SM::ServiceManager& System::ServiceManager() const {
+    return *service_manager;
+}
+
 void System::Shutdown() {
     // Log last frame performance stats
     auto perf_results = GetAndResetPerfStats();
@@ -196,15 +212,17 @@ void System::Shutdown() {
     // Shutdown emulation session
     Movie::GetInstance().Shutdown();
     GDBStub::Shutdown();
-    AudioCore::Shutdown();
     VideoCore::Shutdown();
     Service::Shutdown();
     Kernel::Shutdown();
     HW::Shutdown();
+    telemetry_session.reset();
+    service_manager.reset();
+    dsp_core.reset();
+    cpu_core.reset();
     CoreTiming::Shutdown();
-    cpu_core = nullptr;
-    app_loader = nullptr;
-    telemetry_session = nullptr;
+    app_loader.reset();
+
     if (auto room_member = Network::GetRoomMember().lock()) {
         Network::GameInfo game_info{};
         room_member->SendGameInfo(game_info);

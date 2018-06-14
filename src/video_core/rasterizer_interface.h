@@ -13,7 +13,7 @@ namespace Pica {
 namespace Shader {
 struct OutputVertex;
 }
-}
+} // namespace Pica
 
 namespace VideoCore {
 
@@ -37,6 +37,9 @@ public:
 
     /// Notify rasterizer that any caches of the specified region should be flushed to 3DS memory
     virtual void FlushRegion(PAddr addr, u32 size) = 0;
+
+    /// Notify rasterizer that any caches of the specified region should be invalidated
+    virtual void InvalidateRegion(PAddr addr, u32 size) = 0;
 
     /// Notify rasterizer that any caches of the specified region should be flushed to 3DS memory
     /// and invalidated
@@ -63,5 +66,10 @@ public:
                                    ScreenInfo& screen_info) {
         return false;
     }
+
+    /// Attempt to draw using hardware shaders
+    virtual bool AccelerateDrawBatch(bool is_indexed) {
+        return false;
+    }
 };
-}
+} // namespace VideoCore

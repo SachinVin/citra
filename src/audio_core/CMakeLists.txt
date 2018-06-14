@@ -1,17 +1,17 @@
 add_library(audio_core STATIC
-    audio_core.cpp
-    audio_core.h
+    audio_types.h
     codec.cpp
     codec.h
+    dsp_interface.cpp
+    dsp_interface.h
     hle/common.h
-    hle/dsp.cpp
-    hle/dsp.h
     hle/filter.cpp
     hle/filter.h
+    hle/hle.cpp
+    hle/hle.h
     hle/mixers.cpp
     hle/mixers.h
-    hle/pipe.cpp
-    hle/pipe.h
+    hle/shared_memory.h
     hle/source.cpp
     hle/source.h
     interpolate.cpp
@@ -24,6 +24,7 @@ add_library(audio_core STATIC
     time_stretch.h
 
     $<$<BOOL:${SDL2_FOUND}>:sdl2_sink.cpp sdl2_sink.h>
+    $<$<BOOL:${ENABLE_CUBEB}>:cubeb_sink.cpp cubeb_sink.h>
 )
 
 create_target_directory_groups(audio_core)
@@ -35,3 +36,9 @@ if(SDL2_FOUND)
     target_link_libraries(audio_core PRIVATE SDL2)
     target_compile_definitions(audio_core PRIVATE HAVE_SDL2)
 endif()
+
+if(ENABLE_CUBEB)
+    target_link_libraries(audio_core PRIVATE cubeb)
+    add_definitions(-DHAVE_CUBEB=1)
+endif()
+

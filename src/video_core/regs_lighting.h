@@ -39,13 +39,13 @@ struct LightingRegs {
     }
 
     /**
-    * Pica fragment lighting supports using different LUTs for each lighting component:  Reflectance
-    * R, G, and B channels, distribution function for specular components 0 and 1, fresnel factor,
-    * and spotlight attenuation.  Furthermore, which LUTs are used for each channel (or whether a
-    * channel is enabled at all) is specified by various pre-defined lighting configurations.  With
-    * configurations that require more LUTs, more cycles are required on HW to perform lighting
-    * computations.
-    */
+     * Pica fragment lighting supports using different LUTs for each lighting component: Reflectance
+     * R, G, and B channels, distribution function for specular components 0 and 1, fresnel factor,
+     * and spotlight attenuation.  Furthermore, which LUTs are used for each channel (or whether a
+     * channel is enabled at all) is specified by various pre-defined lighting configurations.  With
+     * configurations that require more LUTs, more cycles are required on HW to perform lighting
+     * computations.
+     */
     enum class LightingConfig : u32 {
         Config0 = 0, ///< Reflect Red, Distribution 0, Spotlight
         Config1 = 1, ///< Reflect Red, Fresnel, Spotlight
@@ -57,16 +57,6 @@ struct LightingRegs {
 
         Config7 = 8, ///< Reflect Red/Green/Blue, Distribution 0/1, Fresnel, Spotlight
                      ///< NOTE: '8' is intentional, '7' does not appear to be a valid configuration
-    };
-
-    /// Selects which lighting components are affected by fresnel
-    enum class LightingFresnelSelector : u32 {
-        None = 0,           ///< Fresnel is disabled
-        PrimaryAlpha = 1,   ///< Primary (diffuse) lighting alpha is affected by fresnel
-        SecondaryAlpha = 2, ///< Secondary (specular) lighting alpha is affected by fresnel
-        Both =
-            PrimaryAlpha |
-            SecondaryAlpha, ///< Both primary and secondary lighting alphas are affected by fresnel
     };
 
     /// Factor used to scale the output of a lighting LUT
@@ -187,9 +177,16 @@ struct LightingRegs {
     BitField<0, 3, u32> max_light_index; // Number of enabled lights - 1
 
     union {
-        BitField<2, 2, LightingFresnelSelector> fresnel_selector;
+        BitField<0, 1, u32> enable_shadow;
+        BitField<2, 1, u32> enable_primary_alpha;
+        BitField<3, 1, u32> enable_secondary_alpha;
         BitField<4, 4, LightingConfig> config;
+        BitField<16, 1, u32> shadow_primary;
+        BitField<17, 1, u32> shadow_secondary;
+        BitField<18, 1, u32> shadow_invert;
+        BitField<19, 1, u32> shadow_alpha;
         BitField<22, 2, u32> bump_selector; // 0: Texture 0, 1: Texture 1, 2: Texture 2
+        BitField<24, 2, u32> shadow_selector;
         BitField<27, 1, u32> clamp_highlights;
         BitField<28, 2, LightingBumpMode> bump_mode;
         BitField<30, 1, u32> disable_bump_renorm;
@@ -197,6 +194,9 @@ struct LightingRegs {
 
     union {
         u32 raw;
+
+        // Each bit specifies whether shadow should be applied for the corresponding light.
+        BitField<0, 8, u32> disable_shadow;
 
         // Each bit specifies whether spot light attenuation should be applied for the corresponding
         // light.
@@ -222,6 +222,10 @@ struct LightingRegs {
 
     bool IsSpotAttenDisabled(unsigned index) const {
         return (config1.disable_spot_atten & (1 << index)) != 0;
+    }
+
+    bool IsShadowDisabled(unsigned index) const {
+        return (config1.disable_shadow & (1 << index)) != 0;
     }
 
     union {

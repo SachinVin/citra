@@ -196,7 +196,8 @@ static void ThreadWakeupCallback(u64 thread_handle, int cycles_late) {
     }
 
     if (thread->status == THREADSTATUS_WAIT_SYNCH_ANY ||
-        thread->status == THREADSTATUS_WAIT_SYNCH_ALL || thread->status == THREADSTATUS_WAIT_ARB) {
+        thread->status == THREADSTATUS_WAIT_SYNCH_ALL || thread->status == THREADSTATUS_WAIT_ARB ||
+        thread->status == THREADSTATUS_WAIT_HLE_EVENT) {
 
         // Invoke the wakeup callback before clearing the wait objects
         if (thread->wakeup_callback)
@@ -241,11 +242,11 @@ void Thread::ResumeFromWait() {
         return;
 
     case THREADSTATUS_RUNNING:
-        DEBUG_ASSERT_MSG(false, "Thread with object id %u has already resumed.", GetObjectId());
+        DEBUG_ASSERT_MSG(false, "Thread with object id {} has already resumed.", GetObjectId());
         return;
     case THREADSTATUS_DEAD:
         // This should never happen, as threads must complete before being stopped.
-        DEBUG_ASSERT_MSG(false, "Thread with object id %u cannot be resumed because it's DEAD.",
+        DEBUG_ASSERT_MSG(false, "Thread with object id {} cannot be resumed because it's DEAD.",
                          GetObjectId());
         return;
     }

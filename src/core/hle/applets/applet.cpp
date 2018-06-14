@@ -31,7 +31,7 @@ struct hash<Service::APT::AppletId> {
         return std::hash<Type>()(static_cast<Type>(id_code));
     }
 };
-}
+} // namespace std
 
 namespace HLE {
 namespace Applets {
@@ -82,7 +82,7 @@ std::shared_ptr<Applet> Applet::Get(Service::APT::AppletId id) {
 static void AppletUpdateEvent(u64 applet_id, int cycles_late) {
     Service::APT::AppletId id = static_cast<Service::APT::AppletId>(applet_id);
     std::shared_ptr<Applet> applet = Applet::Get(id);
-    ASSERT_MSG(applet != nullptr, "Applet doesn't exist! applet_id=%08X", static_cast<u32>(id));
+    ASSERT_MSG(applet != nullptr, "Applet doesn't exist! applet_id={:08X}", static_cast<u32>(id));
 
     applet->Update();
 
@@ -134,5 +134,5 @@ void Init() {
 void Shutdown() {
     CoreTiming::RemoveEvent(applet_update_event);
 }
-}
-} // namespace
+} // namespace Applets
+} // namespace HLE

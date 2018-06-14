@@ -54,9 +54,21 @@ constexpr int NUM_BUTTONS_IR = BUTTON_IR_END - BUTTON_IR_BEGIN;
 constexpr int NUM_BUTTONS_NS = BUTTON_NS_END - BUTTON_NS_BEGIN;
 
 static const std::array<const char*, NumButtons> mapping = {{
-    "button_a", "button_b", "button_x", "button_y", "button_up", "button_down", "button_left",
-    "button_right", "button_l", "button_r", "button_start", "button_select", "button_zl",
-    "button_zr", "button_home",
+    "button_a",
+    "button_b",
+    "button_x",
+    "button_y",
+    "button_up",
+    "button_down",
+    "button_left",
+    "button_right",
+    "button_l",
+    "button_r",
+    "button_start",
+    "button_select",
+    "button_zl",
+    "button_zr",
+    "button_home",
 }};
 } // namespace NativeButton
 
@@ -69,7 +81,8 @@ enum Values {
 };
 
 static const std::array<const char*, NumAnalogs> mapping = {{
-    "circle_pad", "c_stick",
+    "circle_pad",
+    "c_stick",
 }};
 } // namespace NativeAnalog
 
@@ -94,8 +107,11 @@ struct Values {
 
     // Renderer
     bool use_hw_renderer;
+    bool use_hw_shader;
+    bool shaders_accurate_gs;
+    bool shaders_accurate_mul;
     bool use_shader_jit;
-    float resolution_factor;
+    u16 resolution_factor;
     bool use_vsync;
     bool use_frame_limit;
     u16 frame_limit;
@@ -116,8 +132,6 @@ struct Values {
     float bg_green;
     float bg_blue;
 
-    std::string log_filter;
-
     // Audio
     std::string sink_id;
     bool enable_audio_stretching;
@@ -126,10 +140,12 @@ struct Values {
     // Camera
     std::array<std::string, Service::CAM::NumCameras> camera_name;
     std::array<std::string, Service::CAM::NumCameras> camera_config;
+    std::array<int, Service::CAM::NumCameras> camera_flip;
 
     // Debugging
     bool use_gdbstub;
     u16 gdbstub_port;
+    std::string log_filter;
 
     // Movie
     std::string movie_play;

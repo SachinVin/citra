@@ -3,9 +3,9 @@
 // Refer to the license.txt file included.
 
 #include <future>
-#include <json.hpp>
 #include "common/logging/log.h"
 #include "web_service/announce_room_json.h"
+#include "web_service/json.h"
 #include "web_service/web_backend.h"
 
 namespace AnnounceMultiplayerRoom {
@@ -50,7 +50,7 @@ void from_json(const nlohmann::json& json, Room& room) {
     try {
         room.members = json.at("players").get<std::vector<Room::Member>>();
     } catch (const nlohmann::detail::out_of_range& e) {
-        LOG_DEBUG(Network, "Out of range %s", e.what());
+        NGLOG_DEBUG(Network, "Out of range {}", e.what());
     }
 }
 

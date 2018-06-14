@@ -156,7 +156,11 @@ void SplitFilename83(const std::string& filename, std::array<char, 9>& short_nam
 class IOFile : public NonCopyable {
 public:
     IOFile();
-    IOFile(const std::string& filename, const char openmode[]);
+
+    // flags is used for windows specific file open mode flags, which
+    // allows citra to open the logs in shared write mode, so that the file
+    // isn't considered "locked" while citra is open and people can open the log file and view it
+    IOFile(const std::string& filename, const char openmode[], int flags = 0);
 
     ~IOFile();
 
@@ -165,7 +169,7 @@ public:
 
     void Swap(IOFile& other);
 
-    bool Open(const std::string& filename, const char openmode[]);
+    bool Open(const std::string& filename, const char openmode[], int flags = 0);
     bool Close();
 
     template <typename T>
@@ -224,6 +228,10 @@ public:
         return WriteArray(&object, 1);
     }
 
+    size_t WriteString(const std::string& str) {
+        return WriteArray(str.c_str(), str.length());
+    }
+
     bool IsOpen() const {
         return nullptr != m_file;
     }
@@ -253,7 +261,7 @@ private:
     bool m_good = true;
 };
 
-} // namespace
+} // namespace FileUtil
 
 // To deal with Windows being dumb at unicode:
 template <typename T>

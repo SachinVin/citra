@@ -22,8 +22,10 @@ namespace FileSys {
 
 class DiskFile : public FileBackend {
 public:
-    DiskFile(FileUtil::IOFile&& file_, const Mode& mode_)
+    DiskFile(FileUtil::IOFile&& file_, const Mode& mode_,
+             std::unique_ptr<DelayGenerator> delay_generator_)
         : file(new FileUtil::IOFile(std::move(file_))) {
+        delay_generator = std::move(delay_generator_);
         mode.hex = mode_.hex;
     }
 
@@ -44,21 +46,20 @@ protected:
 
 class DiskDirectory : public DirectoryBackend {
 public:
-    DiskDirectory(const std::string& path);
+    explicit DiskDirectory(const std::string& path);
 
     ~DiskDirectory() override {
         Close();
     }
 
-    u32 Read(const u32 count, Entry* entries) override;
+    u32 Read(u32 count, Entry* entries) override;
 
     bool Close() const override {
         return true;
     }
 
 protected:
-    u32 total_entries_in_directory;
-    FileUtil::FSTEntry directory;
+    FileUtil::FSTEntry directory{};
 
     // We need to remember the last entry we returned, so a subsequent call to Read will continue
     // from the next one.  This iterator will always point to the next unread entry.

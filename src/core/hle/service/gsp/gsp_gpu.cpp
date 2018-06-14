@@ -13,6 +13,7 @@
 #include "core/hle/kernel/shared_memory.h"
 #include "core/hle/result.h"
 #include "core/hle/service/gsp/gsp_gpu.h"
+#include "core/hle/shared_page.h"
 #include "core/hw/gpu.h"
 #include "core/hw/hw.h"
 #include "core/hw/lcd.h"
@@ -84,6 +85,13 @@ static inline InterruptRelayQueue* GetInterruptRelayQueue(
     Kernel::SharedPtr<Kernel::SharedMemory> shared_memory, u32 thread_id) {
     u8* ptr = shared_memory->GetPointer(sizeof(InterruptRelayQueue) * thread_id);
     return reinterpret_cast<InterruptRelayQueue*>(ptr);
+}
+
+void GSP_GPU::ClientDisconnected(Kernel::SharedPtr<Kernel::ServerSession> server_session) {
+    SessionData* session_data = GetSessionData(server_session);
+    if (active_thread_id == session_data->thread_id)
+        ReleaseRight(session_data);
+    SessionRequestHandler::ClientDisconnected(server_session);
 }
 
 /**
@@ -254,31 +262,26 @@ ResultCode SetBufferSwap(u32 screen_id, const FrameBufferInfo& info) {
     PAddr phys_address_left = Memory::VirtualToPhysicalAddress(info.address_left);
     PAddr phys_address_right = Memory::VirtualToPhysicalAddress(info.address_right);
     if (info.active_fb == 0) {
-        WriteSingleHWReg(
-            base_address +
-                4 * static_cast<u32>(GPU_REG_INDEX(framebuffer_config[screen_id].address_left1)),
-            phys_address_left);
-        WriteSingleHWReg(
-            base_address +
-                4 * static_cast<u32>(GPU_REG_INDEX(framebuffer_config[screen_id].address_right1)),
-            phys_address_right);
+        WriteSingleHWReg(base_address + 4 * static_cast<u32>(GPU_REG_INDEX(
+                                                framebuffer_config[screen_id].address_left1)),
+                         phys_address_left);
+        WriteSingleHWReg(base_address + 4 * static_cast<u32>(GPU_REG_INDEX(
+                                                framebuffer_config[screen_id].address_right1)),
+                         phys_address_right);
     } else {
-        WriteSingleHWReg(
-            base_address +
-                4 * static_cast<u32>(GPU_REG_INDEX(framebuffer_config[screen_id].address_left2)),
-            phys_address_left);
-        WriteSingleHWReg(
-            base_address +
-                4 * static_cast<u32>(GPU_REG_INDEX(framebuffer_config[screen_id].address_right2)),
-            phys_address_right);
+        WriteSingleHWReg(base_address + 4 * static_cast<u32>(GPU_REG_INDEX(
+                                                framebuffer_config[screen_id].address_left2)),
+                         phys_address_left);
+        WriteSingleHWReg(base_address + 4 * static_cast<u32>(GPU_REG_INDEX(
+                                                framebuffer_config[screen_id].address_right2)),
+                         phys_address_right);
     }
     WriteSingleHWReg(base_address +
                          4 * static_cast<u32>(GPU_REG_INDEX(framebuffer_config[screen_id].stride)),
                      info.stride);
-    WriteSingleHWReg(
-        base_address +
-            4 * static_cast<u32>(GPU_REG_INDEX(framebuffer_config[screen_id].color_format)),
-        info.format);
+    WriteSingleHWReg(base_address + 4 * static_cast<u32>(GPU_REG_INDEX(
+                                            framebuffer_config[screen_id].color_format)),
+                     info.format);
     WriteSingleHWReg(
         base_address + 4 * static_cast<u32>(GPU_REG_INDEX(framebuffer_config[screen_id].active_fb)),
         info.shown_fb);
@@ -458,7 +461,7 @@ static void ExecuteCommand(const Command& command, u32 thread_id) {
                                              command.dma_request.size, Memory::FlushMode::Flush);
         Memory::RasterizerFlushVirtualRegion(command.dma_request.dest_address,
                                              command.dma_request.size,
-                                             Memory::FlushMode::FlushAndInvalidate);
+                                             Memory::FlushMode::Invalidate);
 
         // TODO(Subv): These memory accesses should not go through the application's memory mapping.
         // They should go through the GSP module's memory mapping.
@@ -678,13 +681,17 @@ void GSP_GPU::AcquireRight(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
 }
 
+void GSP_GPU::ReleaseRight(SessionData* session_data) {
+    ASSERT_MSG(active_thread_id == session_data->thread_id,
+               "Wrong thread tried to release GPU right");
+    active_thread_id = -1;
+}
+
 void GSP_GPU::ReleaseRight(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x17, 0, 0);
 
     SessionData* session_data = GetSessionData(ctx.Session());
-    ASSERT_MSG(active_thread_id == session_data->thread_id,
-               "Wrong thread tried to release GPU right");
-    active_thread_id = -1;
+    ReleaseRight(session_data);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
@@ -704,6 +711,17 @@ void GSP_GPU::StoreDataCache(Kernel::HLERequestContext& ctx) {
 
     LOG_DEBUG(Service_GSP, "(STUBBED) called address=0x%08X, size=0x%08X, process=%u", address,
               size, process->process_id);
+}
+
+void GSP_GPU::SetLedForceOff(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x1C, 1, 0);
+
+    u8 state = rp.Pop<u8>();
+    SharedPage::Set3DLed(state);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(RESULT_SUCCESS);
+    LOG_DEBUG(Service_GSP, "(STUBBED) called");
 }
 
 SessionData* GSP_GPU::FindRegisteredThreadData(u32 thread_id) {
@@ -746,7 +764,7 @@ GSP_GPU::GSP_GPU() : ServiceFramework("gsp::Gpu", 2) {
         {0x00190000, nullptr, "SaveVramSysArea"},
         {0x001A0000, nullptr, "RestoreVramSysArea"},
         {0x001B0000, nullptr, "ResetGpuCore"},
-        {0x001C0040, nullptr, "SetLedForceOff"},
+        {0x001C0040, &GSP_GPU::SetLedForceOff, "SetLedForceOff"},
         {0x001D0040, nullptr, "SetTestCommand"},
         {0x001E0080, nullptr, "SetInternalPriorities"},
         {0x001F0082, &GSP_GPU::StoreDataCache, "StoreDataCache"},

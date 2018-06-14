@@ -108,12 +108,10 @@ GRenderWindow::GRenderWindow(QWidget* parent, EmuThread* emu_thread)
     setWindowTitle(QString::fromStdString(window_title));
 
     InputCommon::Init();
-    Network::Init();
 }
 
 GRenderWindow::~GRenderWindow() {
     InputCommon::Shutdown();
-    Network::Shutdown();
 }
 
 void GRenderWindow::moveContext() {
@@ -128,13 +126,14 @@ void GRenderWindow::moveContext() {
 }
 
 void GRenderWindow::SwapBuffers() {
-#if !defined(QT_NO_DEBUG)
-    // Qt debug runtime prints a bogus warning on the console if you haven't called makeCurrent
-    // since the last time you called swapBuffers. This presumably means something if you're using
-    // QGLWidget the "regular" way, but in our multi-threaded use case is harmless since we never
-    // call doneCurrent in this thread.
+    // In our multi-threaded QGLWidget use case we shouldn't need to call `makeCurrent`,
+    // since we never call `doneCurrent` in this thread.
+    // However:
+    // - The Qt debug runtime prints a bogus warning on the console if `makeCurrent` wasn't called
+    // since the last time `swapBuffers` was executed;
+    // - On macOS, if `makeCurrent` isn't called explicitely, resizing the buffer breaks.
     child->makeCurrent();
-#endif
+
     child->swapBuffers();
 }
 

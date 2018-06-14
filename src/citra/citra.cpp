@@ -25,6 +25,7 @@
 
 #include "citra/config.h"
 #include "citra/emu_window/emu_window_sdl2.h"
+#include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/backend.h"
 #include "common/logging/filter.h"
@@ -40,6 +41,13 @@
 #include "core/settings.h"
 #include "network/network.h"
 
+#ifdef _WIN32
+extern "C" {
+// tells Nvidia drivers to use the dedicated GPU by default on laptops with switchable graphics
+__declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+}
+#endif
+
 static void PrintHelp(const char* argv0) {
     std::cout << "Usage: " << argv0
               << " [options] <filename>\n"
@@ -49,6 +57,7 @@ static void PrintHelp(const char* argv0) {
                  " Nickname, password, address and port for multiplayer\n"
                  "-r, --movie-record=[file]  Record a movie (game inputs) to the given file\n"
                  "-p, --movie-play=[file]    Playback the movie (game inputs) from the given file\n"
+                 "-f, --fullscreen     Start in fullscreen mode\n"
                  "-h, --help           Display this help and exit\n"
                  "-v, --version        Output version information and exit\n";
 }
@@ -60,39 +69,39 @@ static void PrintVersion() {
 static void OnStateChanged(const Network::RoomMember::State& state) {
     switch (state) {
     case Network::RoomMember::State::Idle:
-        LOG_DEBUG(Network, "Network is idle");
+        NGLOG_DEBUG(Network, "Network is idle");
         break;
     case Network::RoomMember::State::Joining:
-        LOG_DEBUG(Network, "Connection sequence to room started");
+        NGLOG_DEBUG(Network, "Connection sequence to room started");
         break;
     case Network::RoomMember::State::Joined:
-        LOG_DEBUG(Network, "Successfully joined to the room");
+        NGLOG_DEBUG(Network, "Successfully joined to the room");
         break;
     case Network::RoomMember::State::LostConnection:
-        LOG_DEBUG(Network, "Lost connection to the room");
+        NGLOG_DEBUG(Network, "Lost connection to the room");
         break;
     case Network::RoomMember::State::CouldNotConnect:
-        LOG_ERROR(Network, "State: CouldNotConnect");
+        NGLOG_ERROR(Network, "State: CouldNotConnect");
         exit(1);
         break;
     case Network::RoomMember::State::NameCollision:
-        LOG_ERROR(
+        NGLOG_ERROR(
             Network,
             "You tried to use the same nickname then another user that is connected to the Room");
         exit(1);
         break;
     case Network::RoomMember::State::MacCollision:
-        LOG_ERROR(Network, "You tried to use the same MAC-Address then another user that is "
-                           "connected to the Room");
+        NGLOG_ERROR(Network, "You tried to use the same MAC-Address then another user that is "
+                             "connected to the Room");
         exit(1);
         break;
     case Network::RoomMember::State::WrongPassword:
-        LOG_ERROR(Network, "Room replied with: Wrong password");
+        NGLOG_ERROR(Network, "Room replied with: Wrong password");
         exit(1);
         break;
     case Network::RoomMember::State::WrongVersion:
-        LOG_ERROR(Network,
-                  "You are using a different version then the room you are trying to connect to");
+        NGLOG_ERROR(Network,
+                    "You are using a different version then the room you are trying to connect to");
         exit(1);
         break;
     default:
@@ -119,27 +128,33 @@ int main(int argc, char** argv) {
     auto argv_w = CommandLineToArgvW(GetCommandLineW(), &argc_w);
 
     if (argv_w == nullptr) {
-        LOG_CRITICAL(Frontend, "Failed to get command line arguments");
+        NGLOG_CRITICAL(Frontend, "Failed to get command line arguments");
         return -1;
     }
 #endif
     std::string filepath;
 
     bool use_multiplayer = false;
+    bool fullscreen = false;
     std::string nickname{};
     std::string password{};
     std::string address{};
     u16 port = Network::DefaultRoomPort;
 
     static struct option long_options[] = {
-        {"gdbport", required_argument, 0, 'g'},     {"install", required_argument, 0, 'i'},
-        {"multiplayer", required_argument, 0, 'm'}, {"movie-record", required_argument, 0, 'r'},
-        {"movie-play", required_argument, 0, 'p'},  {"help", no_argument, 0, 'h'},
-        {"version", no_argument, 0, 'v'},           {0, 0, 0, 0},
+        {"gdbport", required_argument, 0, 'g'},
+        {"install", required_argument, 0, 'i'},
+        {"multiplayer", required_argument, 0, 'm'},
+        {"movie-record", required_argument, 0, 'r'},
+        {"movie-play", required_argument, 0, 'p'},
+        {"fullscreen", no_argument, 0, 'f'},
+        {"help", no_argument, 0, 'h'},
+        {"version", no_argument, 0, 'v'},
+        {0, 0, 0, 0},
     };
 
     while (optind < argc) {
-        char arg = getopt_long(argc, argv, "g:i:m:r:p:hv", long_options, &option_index);
+        char arg = getopt_long(argc, argv, "g:i:m:r:p:fhv", long_options, &option_index);
         if (arg != -1) {
             switch (arg) {
             case 'g':
@@ -155,7 +170,7 @@ int main(int argc, char** argv) {
                 break;
             case 'i': {
                 const auto cia_progress = [](size_t written, size_t total) {
-                    LOG_INFO(Frontend, "%02zu%%", (written * 100 / total));
+                    NGLOG_INFO(Frontend, "{:02d}%", (written * 100 / total));
                 };
                 if (Service::AM::InstallCIA(std::string(optarg), cia_progress) !=
                     Service::AM::InstallStatus::Success)
@@ -184,7 +199,7 @@ int main(int argc, char** argv) {
                 address = match[3];
                 if (!match[4].str().empty())
                     port = std::stoi(match[4]);
-                std::regex nickname_re("^[a-zA-Z0-9._- ]+$");
+                std::regex nickname_re("^[a-zA-Z0-9._\\- ]+$");
                 if (!std::regex_match(nickname, nickname_re)) {
                     std::cout
                         << "Nickname is not valid. Must be 4 to 20 alphanumeric characters.\n";
@@ -201,6 +216,10 @@ int main(int argc, char** argv) {
                 break;
             case 'p':
                 movie_play = optarg;
+                break;
+            case 'f':
+                fullscreen = true;
+                NGLOG_INFO(Frontend, "Starting in fullscreen mode...");
                 break;
             case 'h':
                 PrintHelp(argv[0]);
@@ -223,23 +242,27 @@ int main(int argc, char** argv) {
     LocalFree(argv_w);
 #endif
 
-    Log::Filter log_filter(Log::Level::Debug);
-    Log::SetFilter(&log_filter);
-
     MicroProfileOnThreadCreate("EmuThread");
     SCOPE_EXIT({ MicroProfileShutdown(); });
 
     if (filepath.empty()) {
-        LOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
+        NGLOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
         return -1;
     }
 
     if (!movie_record.empty() && !movie_play.empty()) {
-        LOG_CRITICAL(Frontend, "Cannot both play and record a movie");
+        NGLOG_CRITICAL(Frontend, "Cannot both play and record a movie");
         return -1;
     }
 
+    Log::Filter log_filter;
     log_filter.ParseFilterString(Settings::values.log_filter);
+    Log::SetGlobalFilter(log_filter);
+
+    Log::AddBackend(std::make_unique<Log::ColorConsoleBackend>());
+    FileUtil::CreateFullPath(FileUtil::GetUserPath(D_LOGS_IDX));
+    Log::AddBackend(
+        std::make_unique<Log::FileBackend>(FileUtil::GetUserPath(D_LOGS_IDX) + LOG_FILE));
 
     // Apply the command line arguments
     Settings::values.gdbstub_port = gdb_port;
@@ -248,7 +271,7 @@ int main(int argc, char** argv) {
     Settings::values.movie_record = std::move(movie_record);
     Settings::Apply();
 
-    std::unique_ptr<EmuWindow_SDL2> emu_window{std::make_unique<EmuWindow_SDL2>()};
+    std::unique_ptr<EmuWindow_SDL2> emu_window{std::make_unique<EmuWindow_SDL2>(fullscreen)};
 
     Core::System& system{Core::System::GetInstance()};
 
@@ -258,28 +281,28 @@ int main(int argc, char** argv) {
 
     switch (load_result) {
     case Core::System::ResultStatus::ErrorGetLoader:
-        LOG_CRITICAL(Frontend, "Failed to obtain loader for %s!", filepath.c_str());
+        NGLOG_CRITICAL(Frontend, "Failed to obtain loader for {}!", filepath);
         return -1;
     case Core::System::ResultStatus::ErrorLoader:
-        LOG_CRITICAL(Frontend, "Failed to load ROM!");
+        NGLOG_CRITICAL(Frontend, "Failed to load ROM!");
         return -1;
     case Core::System::ResultStatus::ErrorLoader_ErrorEncrypted:
-        LOG_CRITICAL(Frontend, "The game that you are trying to load must be decrypted before "
-                               "being used with Citra. \n\n For more information on dumping and "
-                               "decrypting games, please refer to: "
-                               "https://citra-emu.org/wiki/dumping-game-cartridges/");
+        NGLOG_CRITICAL(Frontend, "The game that you are trying to load must be decrypted before "
+                                 "being used with Citra. \n\n For more information on dumping and "
+                                 "decrypting games, please refer to: "
+                                 "https://citra-emu.org/wiki/dumping-game-cartridges/");
         return -1;
     case Core::System::ResultStatus::ErrorLoader_ErrorInvalidFormat:
-        LOG_CRITICAL(Frontend, "Error while loading ROM: The ROM format is not supported.");
+        NGLOG_CRITICAL(Frontend, "Error while loading ROM: The ROM format is not supported.");
         return -1;
     case Core::System::ResultStatus::ErrorNotInitialized:
-        LOG_CRITICAL(Frontend, "CPUCore not initialized");
+        NGLOG_CRITICAL(Frontend, "CPUCore not initialized");
         return -1;
     case Core::System::ResultStatus::ErrorSystemMode:
-        LOG_CRITICAL(Frontend, "Failed to determine system mode!");
+        NGLOG_CRITICAL(Frontend, "Failed to determine system mode!");
         return -1;
     case Core::System::ResultStatus::ErrorVideoCore:
-        LOG_CRITICAL(Frontend, "VideoCore not initialized");
+        NGLOG_CRITICAL(Frontend, "VideoCore not initialized");
         return -1;
     case Core::System::ResultStatus::Success:
         break; // Expected case
@@ -291,11 +314,11 @@ int main(int argc, char** argv) {
         if (auto member = Network::GetRoomMember().lock()) {
             member->BindOnChatMessageRecieved(OnMessageReceived);
             member->BindOnStateChanged(OnStateChanged);
-            LOG_DEBUG(Network, "Start connection to %s:%u with nickname %s", address.c_str(), port,
-                      nickname.c_str());
+            NGLOG_DEBUG(Network, "Start connection to {}:{} with nickname {}", address, port,
+                        nickname);
             member->Join(nickname, address.c_str(), port, 0, Network::NoPreferredMac, password);
         } else {
-            LOG_ERROR(Network, "Could not access RoomMember");
+            NGLOG_ERROR(Network, "Could not access RoomMember");
             return 0;
         }
     }

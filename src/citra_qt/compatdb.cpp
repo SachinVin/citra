@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <QButtonGroup>
 #include <QMessageBox>
 #include <QPushButton>
 #include "citra_qt/compatdb.h"
@@ -41,7 +42,7 @@ void CompatDB::Submit() {
         }
         break;
     case CompatDBPage::Final:
-        LOG_DEBUG(Frontend, "Compatibility Rating: %d", compatibility->checkedId());
+        NGLOG_DEBUG(Frontend, "Compatibility Rating: {}", compatibility->checkedId());
         Core::Telemetry().AddField(Telemetry::FieldType::UserFeedback, "Compatibility",
                                    compatibility->checkedId());
         // older versions of QT don't support the "NoCancelButtonOnLastPage" option, this is a
@@ -49,7 +50,7 @@ void CompatDB::Submit() {
         button(QWizard::CancelButton)->setVisible(false);
         break;
     default:
-        LOG_ERROR(Frontend, "Unexpected page: %d", currentId());
+        NGLOG_ERROR(Frontend, "Unexpected page: {}", currentId());
     }
 }
 

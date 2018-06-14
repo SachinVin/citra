@@ -3,27 +3,22 @@ cmake_minimum_required(VERSION 3.8)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modules")
 include(DownloadExternals)
+include(CMakeDependentOption)
 
 project(citra)
 
+# Set bundled sdl2/qt as dependent options.
+# OFF by default, but if ENABLE_SDL2 and MSVC are true then ON
 option(ENABLE_SDL2 "Enable the SDL2 frontend" ON)
-option(CITRA_USE_BUNDLED_SDL2 "Download bundled SDL2 binaries" OFF)
+CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_SDL2 "Download bundled SDL2 binaries" ON "ENABLE_SDL2;MSVC" OFF)
 
 option(ENABLE_QT "Enable the Qt frontend" ON)
 option(ENABLE_QT_TRANSLATION "Enable translations for the Qt frontend" OFF)
-option(CITRA_USE_BUNDLED_QT "Download bundled Qt binaries" OFF)
+CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_QT "Download bundled Qt binaries" ON "ENABLE_QT;MSVC" OFF)
 
 option(ENABLE_WEB_SERVICE "Enable web services (telemetry, etc.)" ON)
-option(CITRA_USE_BUNDLED_CURL "FOR MINGW ONLY: Download curl configured against winssl instead of openssl" OFF)
 
-if (ENABLE_WEB_SERVICE AND CITRA_USE_BUNDLED_CURL AND WINDOWS AND MSVC)
-    message("Turning off use bundled curl as msvc can compile curl on cpr")
-    SET(CITRA_USE_BUNDLED_CURL OFF CACHE BOOL "" FORCE)
-endif()
-if (ENABLE_WEB_SERVICE AND NOT CITRA_USE_BUNDLED_CURL AND MINGW)
-    message(AUTHOR_WARNING "Turning on CITRA_USE_BUNDLED_CURL. Override it only if you know what you are doing.")
-    SET(CITRA_USE_BUNDLED_CURL ON CACHE BOOL "" FORCE)
-endif()
+option(ENABLE_CUBEB "Enables the cubeb audio backend" ON)
 
 if(NOT EXISTS ${CMAKE_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
@@ -46,6 +41,22 @@ function(check_submodules_present)
     endforeach()
 endfunction()
 check_submodules_present()
+
+
+configure_file(${CMAKE_SOURCE_DIR}/dist/compatibility_list/compatibility_list.qrc
+               ${CMAKE_BINARY_DIR}/dist/compatibility_list/compatibility_list.qrc
+               COPYONLY)
+
+if (ENABLE_COMPATIBILITY_LIST_DOWNLOAD AND NOT EXISTS ${CMAKE_BINARY_DIR}/dist/compatibility_list/compatibility_list.json)
+    message(STATUS "Downloading compatibility list for citra...")
+    file(DOWNLOAD
+        https://api.citra-emu.org/gamedb/
+        "${CMAKE_BINARY_DIR}/dist/compatibility_list/compatibility_list.json" SHOW_PROGRESS)
+endif()
+
+if (NOT EXISTS ${CMAKE_BINARY_DIR}/dist/compatibility_list/compatibility_list.json)
+    file(WRITE ${CMAKE_BINARY_DIR}/dist/compatibility_list/compatibility_list.json "")
+endif()
 
 # Detect current compilation architecture and create standard definitions
 # =======================================================================
@@ -98,6 +109,7 @@ if (NOT MSVC)
 
     if (MINGW)
         add_definitions(-DMINGW_HAS_SECURE_API)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gdwarf")
 
         if (MINGW_STATIC_BUILD)
             add_definitions(-DQT_STATICPLUGIN)
@@ -108,6 +120,8 @@ if (NOT MSVC)
 else()
     # Silence "deprecation" warnings
     add_definitions(/D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /D_SCL_SECURE_NO_WARNINGS)
+    # Avoid non-compliant standard library extensions
+    add_definitions(/D_CRT_DECLARE_NONSTDC_NAMES)
     # Avoid windows.h junk
     add_definitions(/DNOMINMAX)
     # Avoid windows.h from including some usually unused libs like winsocks.h, since this might cause some redefinition errors.
@@ -162,18 +176,15 @@ add_definitions(-DSINGLETHREADED)
 set_property(DIRECTORY APPEND PROPERTY
     COMPILE_DEFINITIONS $<$<CONFIG:Debug>:_DEBUG> $<$<NOT:$<CONFIG:Debug>>:NDEBUG>)
 
+math(EXPR EMU_ARCH_BITS ${CMAKE_SIZEOF_VOID_P}*8)
+add_definitions(-DEMU_ARCH_BITS=${EMU_ARCH_BITS})
 
 # System imported libraries
 # ======================
 
-find_package(PNG QUIET)
-if (NOT PNG_FOUND)
-    message(STATUS "libpng not found. Some debugging features have been disabled.")
-endif()
-
-find_package(Boost 1.63.0 QUIET)
+find_package(Boost 1.66.0 QUIET)
 if (NOT Boost_FOUND)
-    message(STATUS "Boost 1.63.0 or newer not found, falling back to externals")
+    message(STATUS "Boost 1.66.0 or newer not found, falling back to externals")
 
     set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/externals/boost")
     set(Boost_NO_SYSTEM_PATHS OFF)
@@ -218,7 +229,7 @@ endif()
 if (ENABLE_QT)
     if (CITRA_USE_BUNDLED_QT)
         if (MSVC14 AND ARCHITECTURE_x86_64)
-            set(QT_VER qt-5.7-msvc2015_64)
+            set(QT_VER qt-5.10.0-msvc2017_64)
         else()
             message(FATAL_ERROR "No bundled Qt binaries for your toolchain. Disable CITRA_USE_BUNDLED_QT and provide your own.")
         endif()
@@ -234,7 +245,7 @@ if (ENABLE_QT)
         set(QT_PREFIX_HINT)
     endif()
 
-    find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL ${QT_PREFIX_HINT})
+    find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL Multimedia ${QT_PREFIX_HINT})
 
     if (ENABLE_QT_TRANSLATION)
         find_package(Qt5 REQUIRED COMPONENTS LinguistTools ${QT_PREFIX_HINT})
@@ -279,6 +290,53 @@ if (UNIX OR MINGW)
     endif()
 endif()
 
+# Setup a custom clang-format target (if clang-format can be found) that will run
+# against all the src files. This should be used before making a pull request.
+# =======================================================================
+
+set(CLANG_FORMAT_POSTFIX "-6.0")
+find_program(CLANG_FORMAT
+    NAMES clang-format${CLANG_FORMAT_POSTFIX}
+          clang-format
+    PATHS ${CMAKE_BINARY_DIR}/externals)
+# if find_program doesn't find it, try to download from externals
+if (NOT CLANG_FORMAT)
+    if (WIN32)
+        message(STATUS "Clang format not found! Downloading...")
+        set(CLANG_FORMAT "${CMAKE_BINARY_DIR}/externals/clang-format${CLANG_FORMAT_POSTFIX}.exe")
+        file(DOWNLOAD
+            https://github.com/yuzu-emu/ext-windows-bin/raw/master/clang-format${CLANG_FORMAT_POSTFIX}.exe
+            "${CLANG_FORMAT}" SHOW_PROGRESS
+            STATUS DOWNLOAD_SUCCESS)
+        if (NOT DOWNLOAD_SUCCESS EQUAL 0)
+            message(WARNING "Could not download clang format! Disabling the clang format target")
+            file(REMOVE ${CLANG_FORMAT})
+            unset(CLANG_FORMAT)
+        endif()
+    else()
+        message(WARNING "Clang format not found! Disabling the clang format target")
+    endif()
+endif()
+
+if (CLANG_FORMAT)
+    set(SRCS ${CMAKE_SOURCE_DIR}/src)
+    set(CCOMMENT "Running clang format against all the .h and .cpp files in src/")
+    if (WIN32)
+        add_custom_target(clang-format
+            COMMAND powershell.exe -Command "${CLANG_FORMAT} -i @(Get-ChildItem -Recurse ${SRCS}/* -Include \'*.h\', \'*.cpp\')"
+            COMMENT ${CCOMMENT})
+    elseif(MINGW)
+        add_custom_target(clang-format
+            COMMAND find `cygpath -u ${SRCS}` -iname *.h -o -iname *.cpp | xargs `cygpath -u ${CLANG_FORMAT}` -i
+            COMMENT ${CCOMMENT})
+    else()
+        add_custom_target(clang-format
+            COMMAND find ${SRCS} -iname *.h -o -iname *.cpp | xargs ${CLANG_FORMAT} -i
+            COMMENT ${CCOMMENT})
+    endif()
+    unset(SRCS)
+    unset(CCOMMENT)
+endif()
 
 # Include source code
 # ===================

@@ -57,6 +57,7 @@ add_library(core STATIC
     file_sys/disk_archive.h
     file_sys/errors.h
     file_sys/file_backend.h
+    file_sys/delay_generator.h
     file_sys/ivfc_archive.cpp
     file_sys/ivfc_archive.h
     file_sys/ncch_container.cpp
@@ -273,8 +274,6 @@ add_library(core STATIC
     hle/service/mvd/mvd.h
     hle/service/mvd/mvd_std.cpp
     hle/service/mvd/mvd_std.h
-    hle/service/ndm/ndm.cpp
-    hle/service/ndm/ndm.h
     hle/service/ndm/ndm_u.cpp
     hle/service/ndm/ndm_u.h
     hle/service/news/news.cpp

@@ -6,7 +6,7 @@
 #include <cmath>
 #include <vector>
 #include <SoundTouch.h>
-#include "audio_core/audio_core.h"
+#include "audio_core/audio_types.h"
 #include "audio_core/time_stretch.h"
 #include "common/common_types.h"
 #include "common/logging/log.h"
@@ -55,7 +55,7 @@ std::vector<s16> TimeStretcher::Process(size_t samples_in_queue) {
     std::vector<s16> samples = GetSamples();
     if (samples_in_queue >= DROP_FRAMES_SAMPLE_DELAY) {
         samples.clear();
-        LOG_DEBUG(Audio, "Dropping frames!");
+        NGLOG_DEBUG(Audio, "Dropping frames!");
     }
     return samples;
 }

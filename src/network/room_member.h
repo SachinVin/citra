@@ -21,7 +21,8 @@ struct WifiPacket {
         Data,
         Authentication,
         AssociationResponse,
-        Deauthentication
+        Deauthentication,
+        NodeMap
     };
     PacketType type;      ///< The type of 802.11 frame.
     std::vector<u8> data; ///< Raw 802.11 frame data, starting at the management frame header
@@ -185,5 +186,31 @@ private:
     class RoomMemberImpl;
     std::unique_ptr<RoomMemberImpl> room_member_impl;
 };
+
+static const char* GetStateStr(const RoomMember::State& s) {
+    switch (s) {
+    case RoomMember::State::Idle:
+        return "Idle";
+    case RoomMember::State::Error:
+        return "Error";
+    case RoomMember::State::Joining:
+        return "Joining";
+    case RoomMember::State::Joined:
+        return "Joined";
+    case RoomMember::State::LostConnection:
+        return "LostConnection";
+    case RoomMember::State::NameCollision:
+        return "NameCollision";
+    case RoomMember::State::MacCollision:
+        return "MacCollision";
+    case RoomMember::State::WrongVersion:
+        return "WrongVersion";
+    case RoomMember::State::WrongPassword:
+        return "WrongPassword";
+    case RoomMember::State::CouldNotConnect:
+        return "CouldNotConnect";
+    }
+    return "Unknown";
+}
 
 } // namespace Network
