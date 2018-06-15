@@ -90,6 +90,18 @@ if(ARCHITECTURE_x86_64)
     )
 endif()
 
+if(ANDROID)
+    target_link_libraries(common
+        PRIVATE
+            android
+            log
+            iconv
+            "-Wl,--no-warn-mismatch"
+            "-Wl,--whole-archive"
+            "-Wl,--no-whole-archive"
+    )
+endif()
+
 create_target_directory_groups(common)
 
 target_link_libraries(common PUBLIC Boost::boost fmt microprofile)

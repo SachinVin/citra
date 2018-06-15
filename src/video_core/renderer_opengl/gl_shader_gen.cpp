@@ -101,6 +101,8 @@ PicaFSConfig PicaFSConfig::BuildFromRegs(const Pica::Regs& regs) {
 
     auto& state = res.state;
 
+
+
     state.scissor_test_mode = regs.rasterizer.scissor_test.mode;
 
     state.depthmap_enable = regs.rasterizer.depthmap_enable;
@@ -778,6 +780,7 @@ static void WriteLighting(std::string& out, const PicaFSConfig& config) {
             // LUT index is in the range of (-1.0, 1.0)
             return "LookupLightingLUTSigned(" + sampler_string + ", " + index + ")";
         }
+
     };
 
     // Write the code to emulate each enabled light
@@ -826,6 +829,10 @@ static void WriteLighting(std::string& out, const PicaFSConfig& config) {
             dist_atten = "LookupLightingLUTUnsigned(" +
                          std::to_string(static_cast<unsigned>(sampler)) + "," + index + ")";
         }
+
+
+
+
 
         if (light_config.geometric_factor_0 || light_config.geometric_factor_1) {
             out += "geo_factor = dot(half_vector, half_vector);\n"
@@ -918,11 +925,14 @@ static void WriteLighting(std::string& out, const PicaFSConfig& config) {
 
             // Enabled for diffuse lighting alpha component
             if (lighting.enable_primary_alpha) {
+
                 out += "diffuse_sum.a = " + value + ";\n";
             }
 
             // Enabled for the specular lighting alpha component
             if (lighting.enable_secondary_alpha) {
+
+
                 out += "specular_sum.a = " + value + ";\n";
             }
         }
@@ -1181,7 +1191,7 @@ float ProcTexNoiseCoef(vec2 x) {
 std::string GenerateFragmentShader(const PicaFSConfig& config, bool separable_shader) {
     const auto& state = config.state;
 
-    std::string out = "#version 330 core\n";
+    std::string out = GLShader::GetGLSLVersionString();
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }
@@ -1189,7 +1199,23 @@ std::string GenerateFragmentShader(const PicaFSConfig& config, bool separable_sh
     out += GetVertexInterfaceDeclaration(false, separable_shader);
 
     out += R"(
+// High precision may or may not supported in GLES3. If it isn't, use medium precision instead
+#ifdef GL_ES
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+precision highp samplerBuffer;
+#else
+precision mediump float;
+precision mediump samplerBuffer;
+#endif // GL_FRAGMENT_PRECISION_HIGH
+#endif // GL_ES
+)";
+#ifndef GL_ES
+
+
+
 in vec4 gl_FragCoord;
+#endif // GL_ES
 
 out vec4 color;
 
@@ -1221,13 +1247,13 @@ float LookupLightingLUT(int lut_index, int index, float delta) {
 
 float LookupLightingLUTUnsigned(int lut_index, float pos) {
     int index = clamp(int(pos * 256.0), 0, 255);
-    float delta = pos * 256.0 - index;
+    float delta = pos * 256.0 - float(index);
     return LookupLightingLUT(lut_index, index, delta);
 }
 
 float LookupLightingLUTSigned(int lut_index, float pos) {
     int index = clamp(int(pos * 128.0), -128, 127);
-    float delta = pos * 128.0 - index;
+    float delta = pos * 128.0 - float(index);
     if (index < 0) index += 256;
     return LookupLightingLUT(lut_index, index, delta);
 }
@@ -1274,10 +1300,10 @@ vec4 secondary_fragment_color = vec4(0.0);
         // Negate the condition if we have to keep only the pixels outside the scissor box
         if (state.scissor_test_mode == RasterizerRegs::ScissorMode::Include)
             out += "!";
-        out += "(gl_FragCoord.x >= scissor_x1 && "
-               "gl_FragCoord.y >= scissor_y1 && "
-               "gl_FragCoord.x < scissor_x2 && "
-               "gl_FragCoord.y < scissor_y2)) discard;\n";
+        out += "(gl_FragCoord.x >= float(scissor_x1) && "
+               "gl_FragCoord.y >= float(scissor_y1) && "
+               "gl_FragCoord.x < float(scissor_x2) && "
+               "gl_FragCoord.y < float(scissor_y2))) discard;\n";
     }
 
     // After perspective divide, OpenGL transform z_over_w from [-1, 1] to [near, far]. Here we use
@@ -1309,7 +1335,7 @@ vec4 secondary_fragment_color = vec4(0.0);
     if (state.fog_mode == TexturingRegs::FogMode::Fog) {
         // Get index into fog LUT
         if (state.fog_flip) {
-            out += "float fog_index = (1.0 - depth) * 128.0;\n";
+            out += "float fog_index = (1.0 - float(depth)) * 128.0;\n";
         } else {
             out += "float fog_index = depth * 128.0;\n";
         }
@@ -1341,10 +1367,16 @@ vec4 secondary_fragment_color = vec4(0.0);
 }
 
 std::string GenerateTrivialVertexShader(bool separable_shader) {
-    std::string out = "#version 330 core\n";
+    std::string out = GLShader::GetGLSLVersionString();
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }
+    out += R"(
+#ifdef GL_ES
+#extension GL_EXT_clip_cull_distance : enable
+#endif // GL_ES
+)";
+
 
     out += "layout(location = " + std::to_string((int)ATTRIBUTE_POSITION) +
            ") in vec4 vert_position;\n";
@@ -1362,6 +1394,13 @@ std::string GenerateTrivialVertexShader(bool separable_shader) {
     out += "layout(location = " + std::to_string((int)ATTRIBUTE_VIEW) + ") in vec3 vert_view;\n";
 
     out += GetVertexInterfaceDeclaration(true, separable_shader);
+
+
+
+
+
+
+
 
     out += UniformBlockDef;
 

@@ -13,6 +13,7 @@ namespace GLShader {
  * Utility function to create and compile an OpenGL GLSL shader
  * @param source String of the GLSL shader program
  * @param type Type of the shader (GL_VERTEX_SHADER, GL_GEOMETRY_SHADER or GL_FRAGMENT_SHADER)
+
  */
 GLuint LoadShader(const char* source, GLenum type);
 
@@ -23,5 +24,11 @@ GLuint LoadShader(const char* source, GLenum type);
  * @returns Handle of the newly created OpenGL program object
  */
 GLuint LoadProgram(bool separable_program, const std::vector<GLuint>& shaders);
+
+/**
+ *  Function to find the version string of GLSL corresponding to the GL Version
+ *  @returns The version string of GLSL
+ */
+std::string GetGLSLVersionString();
 
 } // namespace GLShader

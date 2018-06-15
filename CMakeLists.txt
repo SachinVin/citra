@@ -18,7 +18,15 @@ CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_QT "Download bundled Qt binaries" ON "E
 
 option(ENABLE_WEB_SERVICE "Enable web services (telemetry, etc.)" ON)
 
+
 option(ENABLE_CUBEB "Enables the cubeb audio backend" ON)
+
+
+
+
+
+
+
 
 if(NOT EXISTS ${CMAKE_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
@@ -183,11 +191,24 @@ add_definitions(-DEMU_ARCH_BITS=${EMU_ARCH_BITS})
 # ======================
 
 find_package(Boost 1.66.0 QUIET)
+
+
+
+
+
+
+
 if (NOT Boost_FOUND)
     message(STATUS "Boost 1.66.0 or newer not found, falling back to externals")
 
-    set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/externals/boost")
-    set(Boost_NO_SYSTEM_PATHS OFF)
+    # Explicitly tell cmake where to find boost
+    if(ANDROID)
+        set(Boost_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/externals/boost")
+    else()
+        set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/externals/boost")
+        set(Boost_NO_SYSTEM_PATHS OFF)
+    endif()
+
     find_package(Boost QUIET REQUIRED)
 endif()
 
@@ -284,7 +305,15 @@ ENDIF (APPLE)
 
 # MINGW: GCC does not support codecvt, so use iconv instead
 if (UNIX OR MINGW)
-    find_library(ICONV_LIBRARY NAMES iconv)
+    if(NOT ANDROID)
+        find_library(ICONV_LIBRARY NAMES iconv)
+    else()
+        message(STATUS "Using static iconv from Externals")
+        include_directories(externals/libiconv-1.14/include)
+        add_subdirectory(externals/libiconv-1.14)
+        set(ICONV_LIBRARY iconv)
+    endif()
+
     if (ICONV_LIBRARY)
         list(APPEND PLATFORM_LIBRARIES ${ICONV_LIBRARY})
     endif()
