@@ -18,15 +18,7 @@ CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_QT "Download bundled Qt binaries" ON "E
 
 option(ENABLE_WEB_SERVICE "Enable web services (telemetry, etc.)" ON)
 
-
 option(ENABLE_CUBEB "Enables the cubeb audio backend" ON)
-
-
-
-
-
-
-
 
 if(NOT EXISTS ${CMAKE_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
@@ -191,12 +183,6 @@ add_definitions(-DEMU_ARCH_BITS=${EMU_ARCH_BITS})
 # ======================
 
 find_package(Boost 1.66.0 QUIET)
-
-
-
-
-
-
 
 if (NOT Boost_FOUND)
     message(STATUS "Boost 1.66.0 or newer not found, falling back to externals")
