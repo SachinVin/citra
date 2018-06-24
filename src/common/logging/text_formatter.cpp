@@ -63,7 +63,7 @@ void PrintMessage(const Entry& entry) {
 #ifdef ANDROID
     // Android's log level enum are offset by '2' compared to Citras'
     const int android_log_level = (int)entry.log_level + 2;
-    __android_log_print(android_log_level,TAG,"%s",format_buffer.data());
+    __android_log_print(android_log_level,TAG,"%s",str.c_str());
 #else
     fputs(str.c_str(), stderr);
 #endif
