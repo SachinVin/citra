@@ -26,7 +26,7 @@ target_link_libraries(main
 PRIVATE
   android
   log
-  NdkHelper
+  ndk_helper
   "-Wl,--no-warn-mismatch"
   "-Wl,--whole-archive"
   "-Wl,--no-whole-archive"
