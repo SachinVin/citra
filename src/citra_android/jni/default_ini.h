@@ -60,6 +60,7 @@ c_stick=
 #  - "motion_emu" (default) for emulating motion input from mouse input. Required parameters:
 #      - "update_period": update period in milliseconds (default to 100)
 #      - "sensitivity": the coefficient converting mouse movement to tilting angle (default to 0.01)
+#      - "tilt_clamp": the max value of the tilt angle in degrees (default to 90)
 motion_device=
 
 # for touch input, the following devices are available:
@@ -75,6 +76,18 @@ use_cpu_jit =
 # Whether to use software or hardware rendering.
 # 0: Software, 1 (default): Hardware
 use_hw_renderer =
+
+# Whether to use hardware shaders to emulate 3DS shaders
+# 0: Software, 1 (default): Hardware
+use_hw_shader =
+
+# Whether to use accurate multiplication in hardware shaders
+# 0: Off (Default. Faster, but causes issues in some games) 1: On (Slower, but correct)
+shaders_accurate_mul =
+
+# Whether to fallback to software for geometry shaders
+# 0: Off (Faster, but causes issues in some games) 1: On (Default. Slower, but correct)
+shaders_accurate_gs =
 
 # Whether to use the Just-In-Time (JIT) compiler for shader emulation
 # 0: Interpreter (slow), 1 (default): JIT (fast)
@@ -105,11 +118,11 @@ bg_green =
 
 [Layout]
 # Layout for the screen inside the render window.
-# 0 (default): Default Top Bottom Screen, 1: Single Screen Only, 2: Large Screen Small Screen
+# 0 (default): Default Top Bottom Screen, 1: Single Screen Only, 2: Large Screen Small Screen, 3: Side by Side
 layout_option =
 
 # Toggle custom layout (using the settings below) on or off.
-# 0 (default): Off , 1: On
+# 0 (default): Off, 1: On
 custom_layout =
 
 # Screen placement when using Custom layout option
@@ -165,13 +178,19 @@ camera_outer_right_name =
 # A config string for the right outer camera. Its meaning is defined by the camera engine
 camera_outer_right_config =
 
+# The image flip to apply
+# 0: None (default), 1: Horizontal, 2: Vertical, 3: Reverse
+camera_outer_right_flip =
+
 # ... for the left outer camera
 camera_outer_left_name =
 camera_outer_left_config =
+camera_outer_left_flip =
 
 # ... for the inner camera
 camera_inner_name =
 camera_inner_config =
+camera_inner_flip =
 
 [Miscellaneous]
 # A filter which removes logs below a certain logging level.
@@ -191,6 +210,8 @@ enable_telemetry =
 telemetry_endpoint_url = https://services.citra-emu.org/api/telemetry
 # Endpoint URL to verify the username and token
 verify_endpoint_url = https://services.citra-emu.org/api/profile
+# Endpoint URL for announcing public rooms
+announce_multiplayer_room_endpoint_url = https://services.citra-emu.org/api/multiplayer/rooms
 # Username and token for Citra Web Service
 # See https://services.citra-emu.org/ for more info
 citra_username =

@@ -8,6 +8,7 @@
 #include <jni.h>
 
 #include "citra/config.h"
+#include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/backend.h"
 #include "common/logging/filter.h"
@@ -58,7 +59,6 @@ std::vector<u8> GetSMDHData(std::string physical_name) {
     if (!loader)
         LOG_ERROR(Frontend, "Failed to obtain loader");
 
-
     u64 program_id = 0;
     loader->ReadProgramId(program_id);
 
@@ -101,19 +101,24 @@ static int RunCitra(const std::string &path) {
 
     filepath = path;
 
-    Log::Filter log_filter(Log::Level::Debug);
-    Log::SetFilter(&log_filter);
+    Log::Filter log_filter;
+    log_filter.ParseFilterString(Settings::values.log_filter);
+    Log::SetGlobalFilter(log_filter);
 
+    Log::AddBackend(std::make_unique<Log::ColorConsoleBackend>());
+    FileUtil::CreateFullPath(FileUtil::GetUserPath(D_LOGS_IDX));
+    Log::AddBackend(
+            std::make_unique<Log::FileBackend>(FileUtil::GetUserPath(D_LOGS_IDX) + LOG_FILE));
     MicroProfileOnThreadCreate("EmuThread");
     SCOPE_EXIT({ MicroProfileShutdown(); });
 
     if (filepath.empty()) {
-        LOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
+        NGLOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
         return -1;
     }
 
     if (!movie_record.empty() && !movie_play.empty()) {
-        LOG_CRITICAL(Frontend, "Cannot both play and record a movie");
+        NGLOG_CRITICAL(Frontend, "Cannot both play and record a movie");
         return -1;
     }
 
@@ -140,32 +145,32 @@ static int RunCitra(const std::string &path) {
 
     switch (load_result) {
         case Core::System::ResultStatus::ErrorGetLoader:
-            LOG_CRITICAL(Frontend, "Failed to obtain loader for %s!", filepath.c_str());
+            NGLOG_CRITICAL(Frontend, "Failed to obtain loader for {}!", filepath);
             return -1;
         case Core::System::ResultStatus::ErrorLoader:
-            LOG_CRITICAL(Frontend, "Failed to load ROM!");
+            NGLOG_CRITICAL(Frontend, "Failed to load ROM!");
             return -1;
         case Core::System::ResultStatus::ErrorLoader_ErrorEncrypted:
-            LOG_CRITICAL(Frontend, "The game that you are trying to load must be decrypted before "
-                    "being used with Citra. \n\n For more information on dumping and "
-                    "decrypting games, please refer to: "
-                    "https://citra-emu.org/wiki/dumping-game-cartridges/");
+            NGLOG_CRITICAL(Frontend, "The game that you are trying to load must be decrypted before "
+                                     "being used with Citra. \n\n For more information on dumping and "
+                                     "decrypting games, please refer to: "
+                                     "https://citra-emu.org/wiki/dumping-game-cartridges/");
             return -1;
         case Core::System::ResultStatus::ErrorLoader_ErrorInvalidFormat:
-            LOG_CRITICAL(Frontend, "Error while loading ROM: The ROM format is not supported.");
+            NGLOG_CRITICAL(Frontend, "Error while loading ROM: The ROM format is not supported.");
             return -1;
         case Core::System::ResultStatus::ErrorNotInitialized:
-            LOG_CRITICAL(Frontend, "CPUCore not initialized");
+            NGLOG_CRITICAL(Frontend, "CPUCore not initialized");
             return -1;
         case Core::System::ResultStatus::ErrorSystemMode:
-            LOG_CRITICAL(Frontend, "Failed to determine system mode!");
+            NGLOG_CRITICAL(Frontend, "Failed to determine system mode!");
             return -1;
         case Core::System::ResultStatus::ErrorVideoCore:
-            LOG_CRITICAL(Frontend, "VideoCore not initialized");
+            NGLOG_CRITICAL(Frontend, "VideoCore not initialized");
             return -1;
         case Core::System::ResultStatus::Success:
             break; // Expected case
-    }
+        }
 
     Core::Telemetry().AddField(Telemetry::FieldType::App, "Frontend", "SDL");
 
@@ -524,6 +529,4 @@ Java_org_citra_citra_1android_NativeLibrary_Run__Ljava_lang_String_2(JNIEnv *env
 
     is_running = true;
     RunCitra(path);
-
-
 }
