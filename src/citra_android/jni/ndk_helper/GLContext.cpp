@@ -20,14 +20,13 @@
 //--------------------------------------------------------------------------------
 // includes
 //--------------------------------------------------------------------------------
-#include "GLContext.h"
-
 #include <string.h>
 #include <unistd.h>
 #include <string>
 
 #include "gl3stub.h"
 #include "common/logging/log.h"
+#include "GLContext.h"
 
 namespace ndk_helper {
 
@@ -76,7 +75,7 @@ bool GLContext::Init(ANativeWindow* window) {
   //
   // Initialize EGL
   //
-  LOG_INFO(Frontend,"GLContext Init()");
+  NGLOG_INFO(Frontend, "GLContext Init()");
   window_ = window;
   InitEGLSurface();
   InitEGLContext();
@@ -135,7 +134,7 @@ bool GLContext::InitEGLSurface() {
   }
 
   if (!num_configs) {
-    LOG_ERROR(Frontend,"Unable to retrieve EGL config");
+    NGLOG_ERROR(Frontend, "Unable to retrieve EGL config");
     return false;
   }
 
@@ -153,7 +152,7 @@ bool GLContext::InitEGLContext() {
   context_ = eglCreateContext(display_, config_, NULL, context_attribs);
 
   if (eglMakeCurrent(display_, surface_, surface_, context_) == EGL_FALSE) {
-    LOG_WARNING(Frontend,"Unable to eglMakeCurrent");
+    NGLOG_WARNING(Frontend, "Unable to eglMakeCurrent");
     return false;
   }
 
@@ -217,18 +216,18 @@ EGLint GLContext::Resume(ANativeWindow* window) {
 
   if (screen_width_ != original_widhth || screen_height_ != original_height) {
     // Screen resized
-    LOG_INFO(Frontend,"Screen resized");
+    NGLOG_INFO(Frontend,"Screen resized");
   }
 
   if (eglMakeCurrent(display_, surface_, surface_, context_) == EGL_TRUE)
     return EGL_SUCCESS;
 
   EGLint err = eglGetError();
-  LOG_ERROR(Frontend,"Unable to eglMakeCurrent %d", err);
+  NGLOG_ERROR(Frontend,"Unable to eglMakeCurrent {}", err);
 
   if (err == EGL_CONTEXT_LOST) {
     // Recreate context
-    LOG_INFO(Frontend,"Re-creating egl context");
+    NGLOG_INFO(Frontend,"Re-creating egl context");
     InitEGLContext();
   } else {
     // Recreate surface

@@ -21,9 +21,8 @@ target_include_directories(NdkHelper
 
 target_link_libraries(NdkHelper
   PUBLIC
+    common
     GLESv2
     EGL
-    log
-    android
     atomic
 )
