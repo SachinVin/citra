@@ -1195,11 +1195,8 @@ std::string GenerateFragmentShader(const PicaFSConfig& config, bool separable_sh
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }
-
-    out += GetVertexInterfaceDeclaration(false, separable_shader);
-
     out += R"(
-// High precision may or may not supported in GLES3. If it isn't, use medium precision instead
+// High precision may or may not supported in GLES3. If it isn't, use medium precision instead.
 #ifdef GL_ES
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -1209,14 +1206,15 @@ precision mediump float;
 precision mediump samplerBuffer;
 #endif // GL_FRAGMENT_PRECISION_HIGH
 #endif // GL_ES
-)";
+
 #ifndef GL_ES
-
-
-
 in vec4 gl_FragCoord;
 #endif // GL_ES
+)";
 
+    out += GetVertexInterfaceDeclaration(false, separable_shader);
+
+    out += R"(
 out vec4 color;
 
 uniform sampler2D tex0;
@@ -1395,13 +1393,6 @@ std::string GenerateTrivialVertexShader(bool separable_shader) {
 
     out += GetVertexInterfaceDeclaration(true, separable_shader);
 
-
-
-
-
-
-
-
     out += UniformBlockDef;
 
     out += R"(
@@ -1426,7 +1417,7 @@ void main() {
 boost::optional<std::string> GenerateVertexShader(const Pica::Shader::ShaderSetup& setup,
                                                   const PicaVSConfig& config,
                                                   bool separable_shader) {
-    std::string out = "#version 330 core\n";
+    std::string out = GLShader::GetGLSLVersionString();
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }
@@ -1579,12 +1570,16 @@ void EmitPrim(Vertex vtx0, Vertex vtx1, Vertex vtx2) {
 };
 
 std::string GenerateFixedGeometryShader(const PicaFixedGSConfig& config, bool separable_shader) {
-    std::string out = "#version 330 core\n";
+    std::string out = GLShader::GetGLSLVersionString();
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n\n";
     }
 
     out += R"(
+#ifdef GL_ES
+#extension GL_EXT_clip_cull_distance : enable
+#endif
+
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 3) out;
 
@@ -1614,7 +1609,7 @@ void main() {
 boost::optional<std::string> GenerateGeometryShader(const Pica::Shader::ShaderSetup& setup,
                                                     const PicaGSConfig& config,
                                                     bool separable_shader) {
-    std::string out = "#version 330 core\n";
+    std::string out = GLShader::GetGLSLVersionString();
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }

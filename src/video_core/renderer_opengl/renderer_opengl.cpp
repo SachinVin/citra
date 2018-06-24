@@ -24,8 +24,7 @@
 #include "video_core/renderer_opengl/renderer_opengl.h"
 #include "video_core/video_core.h"
 
-static const char vertex_shader_oes[] = R"(
-#version 300 es
+static const char vertex_shader_oes[] = R"(#version 300 es
 
 in vec2 vert_position;
 in vec2 vert_tex_coord;
@@ -47,8 +46,14 @@ void main() {
 }
 )";
 
-static const char fragment_shader_oes[] = R"(
-#version 300 es
+static const char fragment_shader_oes[] = R"(#version 300 es
+#ifdef GL_ES
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif // GL_FRAGMENT_PRECISION_HIGH
+#endif // GL_ES
 
 in vec2 frag_tex_coord;
 out vec4 color;
@@ -343,7 +348,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
 
     switch (format) {
     case GPU::Regs::PixelFormat::RGBA8:
-        internal_format = GL_RGBA8;
+        internal_format = GL_RGBA;
         texture.gl_format = GL_RGBA;
         if (GLAD_GL_ES_VERSION_3_0) {
             texture.gl_type = GL_UNSIGNED_BYTE;
@@ -532,7 +537,7 @@ bool RendererOpenGL::Init() {
 
     if (GLAD_GL_KHR_debug) {
         glEnable(GL_DEBUG_OUTPUT);
-        // glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Great for debugging bad for performance
+        //glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Great for debugging bad for performance
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 

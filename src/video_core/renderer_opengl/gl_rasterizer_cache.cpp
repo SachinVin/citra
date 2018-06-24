@@ -67,6 +67,7 @@ static constexpr std::array<FormatTuple, 4> depth_format_tuples = {{
 }};
 
 static constexpr FormatTuple tex_tuple = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
+
 /**
  * OpenGL ES does not support glGetTexImage. Obtain the pixels by attaching the
  * texture to a framebuffer.
@@ -140,11 +141,6 @@ static inline void getTexImageOES(GLenum target, GLint level, GLint height, GLin
     glBindFramebuffer(GL_FRAMEBUFFER, prev_fbo);
 
     glDeleteFramebuffers(1, &fbo);
-}
-
-RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
-    transfer_framebuffers[0].Create();
-    transfer_framebuffers[1].Create();
 }
 
 static const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
@@ -951,7 +947,13 @@ void CachedSurface::DownloadGLTexture(const MathUtil::Rectangle<u32>& rect, GLui
         state.Apply();
 
         glActiveTexture(GL_TEXTURE0);
-        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, &gl_buffer[buffer_offset]);
+        if(GLAD_GL_ES_VERSION_3_1){
+            getTexImageOES(GL_TEXTURE_2D, 0, height, width, 0,
+                           &gl_buffer[buffer_offset]);
+        }
+        else{
+            glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, &gl_buffer[buffer_offset]);
+        }
     } else {
         state.ResetTexture(texture.handle);
         state.draw.read_framebuffer = read_fb_handle;
@@ -1101,15 +1103,25 @@ RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
     d24s8_abgr_buffer.Create();
     d24s8_abgr_buffer_size = 0;
 
-    const char* vs_source = R"(
-#version 330 core
+    std::string vs_source = GLShader::GetGLSLVersionString();
+    vs_source += R"(
 const vec2 vertices[4] = vec2[4](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0));
 void main() {
     gl_Position = vec4(vertices[gl_VertexID], 0.0, 1.0);
 }
 )";
-    const char* fs_source = R"(
-#version 330 core
+    std::string fs_source = GLShader::GetGLSLVersionString();
+    fs_source += R"(
+#ifdef GL_ES
+#extension GL_ANDROID_extension_pack_es31a : enable
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+precision highp samplerBuffer;
+#else
+precision mediump float;
+precision mediump samplerBuffer;
+#endif // GL_FRAGMENT_PRECISION_HIGH
+#endif // GL_ES
 
 uniform samplerBuffer tbo;
 uniform vec2 tbo_size;
@@ -1117,15 +1129,13 @@ uniform vec4 viewport;
 
 out vec4 color;
 
-
-
 void main() {
     vec2 tbo_coord = (gl_FragCoord.xy - viewport.xy) * tbo_size / viewport.zw;
     int tbo_offset = int(tbo_coord.y) * int(tbo_size.x) + int(tbo_coord.x);
     color = texelFetch(tbo, tbo_offset).rabg;
 }
 )";
-    d24s8_abgr_shader.Create(vs_source, fs_source);
+    d24s8_abgr_shader.Create(vs_source.c_str(), fs_source.c_str());
 
     OpenGLState state = OpenGLState::GetCurState();
     GLuint old_program = state.draw.shader_program;
