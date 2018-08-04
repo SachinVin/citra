@@ -182,6 +182,9 @@ JNIEXPORT jint JNICALL
 Java_org_citra_citra_1android_NativeLibrary_GetPlatform(JNIEnv *env, jclass type,
                                                         jstring filename_);
 
+JNIEXPORT jdoubleArray JNICALL
+Java_org_citra_citra_1android_NativeLibrary_GetPerfStats(JNIEnv *env, jclass type);
+
 #ifdef __cplusplus
 }
 #endif

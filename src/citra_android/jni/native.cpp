@@ -513,6 +513,19 @@ jint Java_org_citra_citra_1android_NativeLibrary_GetPlatform(JNIEnv *env, jclass
     return 0;
 }
 
+jdoubleArray Java_org_citra_citra_1android_NativeLibrary_GetPerfStats(JNIEnv *env, jclass type) {
+
+    auto results = Core::System::GetInstance().GetAndResetPerfStats();
+
+    // Converting the structure into an array makes it easier to pass it to the frontend
+    double stats[4] = {results.system_fps, results.game_fps, results.frametime, results.emulation_speed};
+
+    jdoubleArray jstats = env->NewDoubleArray(4);
+    env->SetDoubleArrayRegion(jstats, 0, 4, stats);
+
+    return jstats;
+}
+
 void Java_org_citra_citra_1android_services_DirectoryInitializationService_SetSysDirectory(
                                                                                       JNIEnv *env,
                                                                                       jclass type,
