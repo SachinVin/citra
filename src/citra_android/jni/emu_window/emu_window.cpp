@@ -24,6 +24,18 @@ void EmuWindow_Android::OnSurfaceChanged(ANativeWindow* surface){
     render_window = surface;
 }
 
+void EmuWindow_Android::OnTouchEvent(int x, int y, bool pressed) {
+    if (pressed) {
+        TouchPressed((unsigned)std::max(x, 0), (unsigned)std::max(y, 0));
+    } else {
+        TouchReleased();
+    }
+}
+
+void EmuWindow_Android::OnTouchMoved(int x, int y) {
+    TouchMoved((unsigned)std::max(x, 0), (unsigned)std::max(y, 0));
+}
+
 void EmuWindow_Android::OnFramebufferSizeChanged() {
     int width, height;
     width = gl_context->GetScreenWidth();

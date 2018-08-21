@@ -273,6 +273,18 @@ void Java_org_citra_citra_1android_NativeLibrary_onGamePadMoveEvent(JNIEnv *env,
     InputManager::AnalogHandler()->MoveJoystick(Axis, x, y);
 }
 
+void Java_org_citra_citra_1android_NativeLibrary_onTouchEvent(JNIEnv *env, jobject obj,
+                                                               jfloat x, jfloat y, jboolean pressed) {
+        LOG_DEBUG(Frontend, "Touch at x: %d y: %d", (int) x, (int) y);
+        emu->OnTouchEvent((int) x, (int) y, (bool) pressed);
+}
+
+void Java_org_citra_citra_1android_NativeLibrary_onTouchMoved(JNIEnv *env, jobject obj,
+                                                               jfloat x, jfloat y) {
+        LOG_DEBUG(Frontend, "Touch at x: %d y: %d", (int) x, (int) y);
+        emu->OnTouchMoved((int) x, (int) y);
+}
+
 jintArray Java_org_citra_citra_1android_NativeLibrary_GetBanner(JNIEnv *env, jobject obj,
                                                                 jstring jFilepath) {
     int size = 48;

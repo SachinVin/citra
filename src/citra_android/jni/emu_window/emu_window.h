@@ -30,6 +30,11 @@ public:
     /// Called by the onSurfaceChanges() method to change the surface
     void OnSurfaceChanged(ANativeWindow* surface);
 
+    /// Handles touch event that occur.(Touched or released)
+    void OnTouchEvent(int x, int y, bool pressed);
+
+    /// Handles movement of touch pointer
+    void OnTouchMoved(int x, int y);
 
 private:
     /// Called by PollEvents when a key is pressed or released.

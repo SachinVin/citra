@@ -38,6 +38,13 @@ JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_onGamePadMove
                                                                                       jfloat x,
                                                                                       jfloat y);
 
+JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_onTouchEvent(JNIEnv *env, jobject obj,
+                                                                                jfloat x, jfloat y,
+                                                                                jboolean pressed);
+
+JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_onTouchMoved(JNIEnv *env, jobject obj,
+                                                               jfloat x, jfloat y);
+
 JNIEXPORT jintArray JNICALL Java_org_citra_citra_1android_NativeLibrary_GetBanner(JNIEnv *env,
                                                                                   jobject obj,
                                                                                   jstring jFile);
