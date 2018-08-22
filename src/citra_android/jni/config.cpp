@@ -5,12 +5,12 @@
 #include <memory>
 #include <inih/cpp/INIReader.h>
 #include "button_manager.h"
-#include "config.h"
-#include "default_ini.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/param_package.h"
+#include "config.h"
 #include "core/settings.h"
+#include "default_ini.h"
 #include "input_common/main.h"
 
 Config::Config() {
@@ -42,16 +42,16 @@ bool Config::LoadINI(const std::string& default_contents, bool retry) {
 }
 
 static const std::array<int, Settings::NativeButton::NumButtons> default_buttons = {
-    InputManager::N3DS_BUTTON_A, InputManager::N3DS_BUTTON_B, InputManager::N3DS_BUTTON_X,
-    InputManager::N3DS_BUTTON_Y, InputManager::N3DS_DPAD_UP, InputManager::N3DS_DPAD_DOWN,
-    InputManager::N3DS_DPAD_LEFT, InputManager::N3DS_DPAD_RIGHT, InputManager::N3DS_TRIGGER_L,
-    InputManager::N3DS_TRIGGER_R, InputManager::N3DS_BUTTON_START,
-    InputManager::N3DS_BUTTON_SELECT, InputManager::N3DS_BUTTON_ZL, InputManager::N3DS_BUTTON_ZR,
-    InputManager::N3DS_BUTTON_HOME,
+    InputManager::N3DS_BUTTON_A,  InputManager::N3DS_BUTTON_B,     InputManager::N3DS_BUTTON_X,
+    InputManager::N3DS_BUTTON_Y,  InputManager::N3DS_DPAD_UP,      InputManager::N3DS_DPAD_DOWN,
+    InputManager::N3DS_DPAD_LEFT, InputManager::N3DS_DPAD_RIGHT,   InputManager::N3DS_TRIGGER_L,
+    InputManager::N3DS_TRIGGER_R, InputManager::N3DS_BUTTON_START, InputManager::N3DS_BUTTON_SELECT,
+    InputManager::N3DS_BUTTON_ZL, InputManager::N3DS_BUTTON_ZR,    InputManager::N3DS_BUTTON_HOME,
 };
 
 static const std::array<int, Settings::NativeAnalog::NumAnalogs> default_analogs{{
-    InputManager::N3DS_CIRCLEPAD, InputManager::N3DS_STICK_C,
+    InputManager::N3DS_CIRCLEPAD,
+    InputManager::N3DS_STICK_C,
 }};
 
 void Config::ReadValues() {
@@ -90,7 +90,7 @@ void Config::ReadValues() {
         sdl2_config->GetBoolean("Renderer", "shaders_accurate_mul", false);
     Settings::values.use_shader_jit = sdl2_config->GetBoolean("Renderer", "use_shader_jit", true);
     Settings::values.resolution_factor =
-       static_cast<u16>(sdl2_config->GetInteger("Renderer", "resolution_factor", 1));
+        static_cast<u16>(sdl2_config->GetInteger("Renderer", "resolution_factor", 1));
     Settings::values.use_vsync = sdl2_config->GetBoolean("Renderer", "use_vsync", false);
     Settings::values.use_frame_limit = sdl2_config->GetBoolean("Renderer", "use_frame_limit", true);
     Settings::values.frame_limit =

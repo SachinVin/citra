@@ -9,7 +9,6 @@
 #include "citra_android/jni/ndk_helper/GLContext.h"
 #include "core/frontend/emu_window.h"
 
-
 class EmuWindow_Android : public EmuWindow {
 public:
     EmuWindow_Android(ANativeWindow* surface);
@@ -57,6 +56,4 @@ private:
 
     /// A helper class for handling the EGL context
     ndk_helper::GLContext* gl_context;
-
-
 };

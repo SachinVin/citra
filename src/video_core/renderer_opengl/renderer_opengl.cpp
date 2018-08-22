@@ -101,7 +101,6 @@ void main() {
 }
 )";
 
-
 /**
  * Vertex structure that the drawn screen rectangles are composed of.
  */
@@ -282,8 +281,7 @@ void RendererOpenGL::InitOpenGLObjects() {
     // Link shaders and get variable locations
     if (GLAD_GL_ES_VERSION_3_0) {
         shader.Create(vertex_shader_oes, fragment_shader_oes);
-    }
-    else {
+    } else {
         shader.Create(vertex_shader, fragment_shader);
     }
     state.draw.shader_program = shader.handle;
@@ -352,8 +350,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
         texture.gl_format = GL_RGBA;
         if (GLAD_GL_ES_VERSION_3_0) {
             texture.gl_type = GL_UNSIGNED_BYTE;
-        }
-        else {
+        } else {
             texture.gl_type = GL_UNSIGNED_INT_8_8_8_8;
         }
         break;
@@ -368,8 +365,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
         // GLES Dosen't support BGR , Use RGB instead
         if (GLAD_GL_ES_VERSION_3_1) {
             texture.gl_format = GL_RGB;
-        }
-        else {
+        } else {
             texture.gl_format = GL_BGR;
         }
         texture.gl_type = GL_UNSIGNED_BYTE;
@@ -537,7 +533,7 @@ bool RendererOpenGL::Init() {
 
     if (GLAD_GL_KHR_debug) {
         glEnable(GL_DEBUG_OUTPUT);
-        //glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Great for debugging bad for performance
+        // glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Great for debugging bad for performance
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 
@@ -553,7 +549,7 @@ bool RendererOpenGL::Init() {
     Core::Telemetry().AddField(Telemetry::FieldType::UserSystem, "GPU_Model", gpu_model);
     Core::Telemetry().AddField(Telemetry::FieldType::UserSystem, "GPU_OpenGL_Version", gl_version);
 
-    if (!(GLAD_GL_VERSION_3_3||GLAD_GL_ES_VERSION_3_0)) {
+    if (!(GLAD_GL_VERSION_3_3 || GLAD_GL_ES_VERSION_3_0)) {
         return false;
     }
 

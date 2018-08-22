@@ -5,7 +5,6 @@
 #include <array>
 #include <cstdio>
 
-
 #ifdef _WIN32
 #include <windows.h>
 #elif defined(ANDROID)
@@ -25,28 +24,6 @@ namespace Log {
 
 std::string FormatLogMessage(const Entry& entry) {
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     unsigned int time_seconds = static_cast<unsigned int>(entry.timestamp.count() / 1000000);
     unsigned int time_fractional = static_cast<unsigned int>(entry.timestamp.count() % 1000000);
 
@@ -63,13 +40,10 @@ void PrintMessage(const Entry& entry) {
 #ifdef ANDROID
     // Android's log level enum are offset by '2' compared to Citras'
     const int android_log_level = (int)entry.log_level + 2;
-    __android_log_print(android_log_level,TAG,"%s",str.c_str());
+    __android_log_print(android_log_level, TAG, "%s", str.c_str());
 #else
     fputs(str.c_str(), stderr);
 #endif
-
-
-
 }
 
 void PrintColoredMessage(const Entry& entry) {

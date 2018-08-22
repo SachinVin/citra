@@ -3,26 +3,25 @@
 // Refer to the license.txt file included.
 
 #include <cmath>
-#include <string>
+#include <list>
 #include <mutex>
+#include <string>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
-#include <list>
+#include "citra_android/jni/button_manager.h"
 #include "common/logging/log.h"
 #include "common/math_util.h"
 #include "common/param_package.h"
 #include "input_common/main.h"
 #include "input_common/sdl/sdl.h"
-#include "button_manager.h"
 
 namespace InputManager {
 
 // Button Handler
 class KeyButton final : public Input::ButtonDevice {
 public:
-    explicit KeyButton(std::shared_ptr<ButtonList> button_list_)
-            : button_list(button_list_) {}
+    explicit KeyButton(std::shared_ptr<ButtonList> button_list_) : button_list(button_list_) {}
 
     ~KeyButton();
 
@@ -39,25 +38,25 @@ private:
 
 struct KeyButtonPair {
     int button_id;
-    KeyButton *key_button;
+    KeyButton* key_button;
 };
 
 class ButtonList {
 public:
-    void AddButton(int button_id, KeyButton *key_button) {
+    void AddButton(int button_id, KeyButton* key_button) {
         std::lock_guard<std::mutex> guard(mutex);
         list.push_back(KeyButtonPair{button_id, key_button});
     }
 
-    void RemoveButton(const KeyButton *key_button) {
+    void RemoveButton(const KeyButton* key_button) {
         std::lock_guard<std::mutex> guard(mutex);
         list.remove_if(
-                [key_button](const KeyButtonPair &pair) { return pair.key_button == key_button; });
+            [key_button](const KeyButtonPair& pair) { return pair.key_button == key_button; });
     }
 
     void ChangeButtonStatus(int button_id, bool pressed) {
         std::lock_guard<std::mutex> guard(mutex);
-        for (const KeyButtonPair &pair : list) {
+        for (const KeyButtonPair& pair : list) {
             if (pair.button_id == button_id)
                 pair.key_button->status.store(pressed);
         }
@@ -65,7 +64,7 @@ public:
 
     void ChangeAllButtonStatus(bool pressed) {
         std::lock_guard<std::mutex> guard(mutex);
-        for (const KeyButtonPair &pair : list) {
+        for (const KeyButtonPair& pair : list) {
             pair.key_button->status.store(pressed);
         }
     }
@@ -81,7 +80,7 @@ KeyButton::~KeyButton() {
     button_list->RemoveButton(this);
 }
 
-std::unique_ptr<Input::ButtonDevice> ButtonFactory::Create(const Common::ParamPackage &params) {
+std::unique_ptr<Input::ButtonDevice> ButtonFactory::Create(const Common::ParamPackage& params) {
     int button_id = params.Get("code", 0);
     std::unique_ptr<KeyButton> button = std::make_unique<KeyButton>(button_list);
     button_list->AddButton(button_id, button.get());
@@ -96,12 +95,10 @@ void ButtonFactory::ReleaseKey(int button_id) {
     button_list->ChangeButtonStatus(button_id, false);
 }
 
-
 // Joystick Handler
 class Joystick final : public Input::AnalogDevice {
 public:
-    explicit Joystick(std::shared_ptr<AnalogList> button_list_)
-            : button_list(button_list_) {}
+    explicit Joystick(std::shared_ptr<AnalogList> button_list_) : button_list(button_list_) {}
 
     ~Joystick();
 
@@ -119,25 +116,25 @@ private:
 
 struct AnalogPair {
     int analog_id;
-    Joystick *key_button;
+    Joystick* key_button;
 };
 
 class AnalogList {
 public:
-    void AddButton(int analog_id, Joystick *key_button) {
+    void AddButton(int analog_id, Joystick* key_button) {
         std::lock_guard<std::mutex> guard(mutex);
         list.push_back(AnalogPair{analog_id, key_button});
     }
 
-    void RemoveButton(const Joystick *key_button) {
+    void RemoveButton(const Joystick* key_button) {
         std::lock_guard<std::mutex> guard(mutex);
         list.remove_if(
-                [key_button](const AnalogPair &pair) { return pair.key_button == key_button; });
+            [key_button](const AnalogPair& pair) { return pair.key_button == key_button; });
     }
 
     void ChangeJoystickStatus(int analog_id, float x, float y) {
         std::lock_guard<std::mutex> guard(mutex);
-        for (const AnalogPair &pair : list) {
+        for (const AnalogPair& pair : list) {
             if (pair.analog_id == analog_id) {
                 pair.key_button->x_axis.store(x);
                 pair.key_button->y_axis.store(y);
@@ -147,7 +144,7 @@ public:
 
     void ChangeAllButtonStatus(int analog_id, float x, float y) {
         std::lock_guard<std::mutex> guard(mutex);
-        for (const AnalogPair &pair : list) {
+        for (const AnalogPair& pair : list) {
             pair.key_button->x_axis.store(x);
             pair.key_button->y_axis.store(y);
         }
@@ -164,7 +161,7 @@ Joystick::~Joystick() {
     button_list->RemoveButton(this);
 }
 
-std::unique_ptr<Input::AnalogDevice> AnalogFactory::Create(const Common::ParamPackage &params) {
+std::unique_ptr<Input::AnalogDevice> AnalogFactory::Create(const Common::ParamPackage& params) {
     int analog_id = params.Get("code", 0);
     std::unique_ptr<Joystick> button = std::make_unique<Joystick>(analog_list);
     analog_list->AddButton(analog_id, button.get());
@@ -199,16 +196,18 @@ AnalogFactory* AnalogHandler() {
     return analog.get();
 }
 
-std::string GenerateButtonParamPackage(int button){
+std::string GenerateButtonParamPackage(int button) {
     Common::ParamPackage param{
-            {"engine", "gamepad"}, {"code", std::to_string(button)},
+        {"engine", "gamepad"},
+        {"code", std::to_string(button)},
     };
     return param.Serialize();
 }
 
-std::string GenerateAnalogParamPackage(int button){
+std::string GenerateAnalogParamPackage(int button) {
     Common::ParamPackage param{
-            {"engine", "gamepad"}, {"code", std::to_string(button)},
+        {"engine", "gamepad"},
+        {"code", std::to_string(button)},
     };
     return param.Serialize();
 }
