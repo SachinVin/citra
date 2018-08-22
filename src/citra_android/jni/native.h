@@ -1,9 +1,3 @@
-/**
- * Gets the SMDH data from file.
- * @param std::string physical_name
- * @return std::vector<u8> SMDH data
- */
-std::vector<u8> GetSMDHData(std::string physical_name);
 
 // Initialise and run the emulator
 static int RunCitra(const std::string& path);

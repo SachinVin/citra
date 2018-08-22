@@ -8,6 +8,8 @@ add_library(main SHARED
     default_ini.h
     emu_window/emu_window.cpp
     emu_window/emu_window.h
+    game_info.cpp
+    game_info.h
     native.cpp
     native.h
 )

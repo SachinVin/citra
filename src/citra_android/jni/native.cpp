@@ -10,6 +10,7 @@
 #include "citra_android/jni/button_manager.h"
 #include "citra_android/jni/config.h"
 #include "citra_android/jni/emu_window/emu_window.h"
+#include "citra_android/jni/game_info.h"
 #include "citra_android/jni/native.h"
 #include "common/common_paths.h"
 #include "common/file_util.h"
@@ -52,40 +53,6 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     g_java_vm = vm;
 
     return JNI_VERSION_1_6;
-}
-
-std::vector<u8> GetSMDHData(std::string physical_name) {
-    std::unique_ptr<Loader::AppLoader> loader = Loader::GetLoader(physical_name);
-    if (!loader)
-        LOG_ERROR(Frontend, "Failed to obtain loader");
-
-    u64 program_id = 0;
-    loader->ReadProgramId(program_id);
-
-    std::vector<u8> smdh = [program_id, &loader]() -> std::vector<u8> {
-        std::vector<u8> original_smdh;
-        loader->ReadIcon(original_smdh);
-
-        if (program_id < 0x00040000'00000000 || program_id > 0x00040000'FFFFFFFF)
-            return original_smdh;
-
-        std::string update_path = Service::AM::GetTitleContentPath(
-            Service::FS::MediaType::SDMC, program_id + 0x0000000E'00000000);
-
-        if (!FileUtil::Exists(update_path))
-            return original_smdh;
-
-        std::unique_ptr<Loader::AppLoader> update_loader = Loader::GetLoader(update_path);
-
-        if (!update_loader)
-            return original_smdh;
-
-        std::vector<u8> update_smdh;
-        update_loader->ReadIcon(update_smdh);
-        return update_smdh;
-    }();
-
-    return smdh;
 }
 
 static int RunCitra(const std::string& path) {
@@ -275,48 +242,24 @@ void Java_org_citra_citra_1android_NativeLibrary_onTouchMoved(JNIEnv* env, jobje
 
 jintArray Java_org_citra_citra_1android_NativeLibrary_GetBanner(JNIEnv* env, jobject obj,
                                                                 jstring jFilepath) {
-    int size = 48;
-
     std::string filepath = GetJString(env, jFilepath);
-    std::vector<u8> smdh_data = GetSMDHData(filepath);
 
-    if (!Loader::IsValidSMDH(smdh_data)) {
-        // SMDH is not valid, set a default icon
-        LOG_ERROR(Frontend, "SMDH is Invalid");
+    std::vector<u16> icon_data = GameInfo::GetIcon(filepath);
+    if (icon_data.size() == 0) {
         return 0;
     }
 
-    Loader::SMDH smdh;
-    memcpy(&smdh, smdh_data.data(), sizeof(Loader::SMDH));
-
-    // Always get a 48x48(large) icon
-    std::vector<u16> icon_data = smdh.GetIcon(true);
-
-    jintArray Banner = env->NewIntArray(size * size);
-    env->SetIntArrayRegion(Banner, 0, size * size, reinterpret_cast<jint*>(icon_data.data()));
+    jintArray Banner = env->NewIntArray(icon_data.size());
+    env->SetIntArrayRegion(Banner, 0, icon_data.size(), reinterpret_cast<jint*>(icon_data.data()));
 
     return Banner;
 }
 
 jstring Java_org_citra_citra_1android_NativeLibrary_GetTitle(JNIEnv* env, jobject obj,
                                                              jstring jFilepath) {
-    Loader::SMDH::TitleLanguage language = Loader::SMDH::TitleLanguage::English;
     std::string filepath = GetJString(env, jFilepath);
-    std::vector<u8> smdh_data = GetSMDHData(filepath);
 
-    if (!Loader::IsValidSMDH(smdh_data)) {
-        // SMDH is not valid, Return the file name;
-        LOG_ERROR(Frontend, "SMDH is Invalid");
-        return jFilepath;
-    }
-
-    Loader::SMDH smdh;
-    memcpy(&smdh, smdh_data.data(), sizeof(Loader::SMDH));
-
-    // Get the title from SMDH in UTF-16 format
-    char16_t* Title;
-    Title = reinterpret_cast<char16_t*>(smdh.titles[static_cast<int>(language)].long_title.data());
-
+    char16_t* Title = GameInfo::GetTitle(filepath);
     LOG_INFO(Frontend, "Title: %s", Common::UTF16ToUTF8(Title).data());
 
     return env->NewStringUTF(Common::UTF16ToUTF8(Title).data());
@@ -339,23 +282,9 @@ jint Java_org_citra_citra_1android_NativeLibrary_GetCountry(JNIEnv* env, jobject
 
 jstring Java_org_citra_citra_1android_NativeLibrary_GetCompany(JNIEnv* env, jobject obj,
                                                                jstring jFilepath) {
-    Loader::SMDH::TitleLanguage language = Loader::SMDH::TitleLanguage::English;
     std::string filepath = GetJString(env, jFilepath);
-    std::vector<u8> smdh_data = GetSMDHData(filepath);
 
-    if (!Loader::IsValidSMDH(smdh_data)) {
-        // SMDH is not valid ,return null
-        LOG_ERROR(Frontend, "SMDH is Invalid");
-        return nullptr;
-    }
-
-    Loader::SMDH smdh;
-    memcpy(&smdh, smdh_data.data(), sizeof(Loader::SMDH));
-
-    // Get the Publisher's name from SMDH in UTF-16 format
-    char16_t* Publisher;
-    Publisher =
-        reinterpret_cast<char16_t*>(smdh.titles[static_cast<int>(language)].publisher.data());
+    char16_t* Publisher = GameInfo::GetPublisher(filepath);
 
     LOG_INFO(Frontend, "Publisher: %s", Common::UTF16ToUTF8(Publisher).data());
 
