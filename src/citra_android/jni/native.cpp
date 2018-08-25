@@ -260,7 +260,10 @@ jstring Java_org_citra_citra_1android_NativeLibrary_GetTitle(JNIEnv* env, jobjec
     std::string filepath = GetJString(env, jFilepath);
 
     char16_t* Title = GameInfo::GetTitle(filepath);
-    LOG_INFO(Frontend, "Title: %s", Common::UTF16ToUTF8(Title).data());
+
+    if (!Title) {
+        return env->NewStringUTF("");
+    }
 
     return env->NewStringUTF(Common::UTF16ToUTF8(Title).data());
 }
@@ -286,7 +289,9 @@ jstring Java_org_citra_citra_1android_NativeLibrary_GetCompany(JNIEnv* env, jobj
 
     char16_t* Publisher = GameInfo::GetPublisher(filepath);
 
-    LOG_INFO(Frontend, "Publisher: %s", Common::UTF16ToUTF8(Publisher).data());
+    if (!Publisher) {
+        return nullptr;
+    }
 
     return env->NewStringUTF(Common::UTF16ToUTF8(Publisher).data());
 }
