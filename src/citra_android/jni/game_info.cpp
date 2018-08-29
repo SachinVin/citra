@@ -11,7 +11,7 @@
 #include "core/hle/service/fs/archive.h"
 #include "core/loader/loader.h"
 #include "core/loader/smdh.h"
-#include "game_info.h"
+#include "citra_android/jni/game_info.h"
 
 namespace GameInfo {
 std::vector<u8> GetSMDHData(std::string physical_name) {

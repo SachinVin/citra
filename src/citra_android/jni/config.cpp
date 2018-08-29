@@ -4,13 +4,13 @@
 
 #include <memory>
 #include <inih/cpp/INIReader.h>
-#include "button_manager.h"
+#include "citra_android/jni/button_manager.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/param_package.h"
-#include "config.h"
+#include "citra_android/jni/config.h"
 #include "core/settings.h"
-#include "default_ini.h"
+#include "citra_android/jni/default_ini.h"
 #include "input_common/main.h"
 
 Config::Config() {
