@@ -11,8 +11,10 @@
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <cryptopp/osrng.h>
 #include "common/common_types.h"
 #include "common/logging/log.h"
+#include "core/core.h"
 #include "core/core_timing.h"
 #include "core/hle/ipc_helpers.h"
 #include "core/hle/kernel/event.h"
@@ -78,7 +80,7 @@ static u8 network_channel = DefaultNetworkChannel;
 static NetworkInfo network_info;
 
 // Mapping of mac addresses to their respective node_ids.
-static std::map<MacAddress, u32> node_map;
+static std::map<MacAddress, u16> node_map;
 
 // Event that will generate and send the 802.11 beacon frames.
 static CoreTiming::EventType* beacon_broadcast_event;
@@ -159,14 +161,15 @@ static void BroadcastNodeMap() {
     packet.type = Network::WifiPacket::PacketType::NodeMap;
     packet.destination_address = Network::BroadcastMac;
     size_t size = node_map.size();
-    packet.data.resize(sizeof(size) + (sizeof(Network::MacAddress) + sizeof(u32)) * size);
+    using node_t = decltype(node_map)::value_type;
+    packet.data.resize(sizeof(size) + (sizeof(node_t::first) + sizeof(node_t::second)) * size);
     std::memcpy(packet.data.data(), &size, sizeof(size));
     size_t offset = sizeof(size);
     for (const auto& node : node_map) {
         std::memcpy(packet.data.data() + offset, node.first.data(), sizeof(node.first));
         std::memcpy(packet.data.data() + offset + sizeof(node.first), &node.second,
                     sizeof(node.second));
-        offset += sizeof(Network::MacAddress) + sizeof(u32);
+        offset += sizeof(node.first) + sizeof(node.second);
     }
 
     SendPacket(packet);
@@ -177,7 +180,7 @@ static void HandleNodeMapPacket(const Network::WifiPacket& packet) {
     node_map.clear();
     size_t num_entries;
     Network::MacAddress address;
-    u32 id;
+    u16 id;
     std::memcpy(&num_entries, packet.data.data(), sizeof(num_entries));
     size_t offset = sizeof(num_entries);
     for (size_t i = 0; i < num_entries; ++i) {
@@ -238,7 +241,7 @@ static void HandleEAPoLPacket(const Network::WifiPacket& packet) {
 
     if (GetEAPoLFrameType(packet.data) == EAPoLStartMagic) {
         if (connection_status.status != static_cast<u32>(NetworkStatus::ConnectedAsHost)) {
-            LOG_DEBUG(Service_NWM, "Connection sequence aborted, because connection status is %u",
+            LOG_DEBUG(Service_NWM, "Connection sequence aborted, because connection status is {}",
                       connection_status.status);
             return;
         }
@@ -425,7 +428,7 @@ void SendAssociationResponseFrame(const MacAddress& address) {
     {
         std::lock_guard<std::mutex> lock(connection_status_mutex);
         if (connection_status.status != static_cast<u32>(NetworkStatus::ConnectedAsHost)) {
-            LOG_ERROR(Service_NWM, "Connection sequence aborted, because connection status is %u",
+            LOG_ERROR(Service_NWM, "Connection sequence aborted, because connection status is {}",
                       connection_status.status);
             return;
         }
@@ -458,7 +461,7 @@ void HandleAuthenticationFrame(const Network::WifiPacket& packet) {
             std::lock_guard<std::mutex> lock(connection_status_mutex);
             if (connection_status.status != static_cast<u32>(NetworkStatus::ConnectedAsHost)) {
                 LOG_ERROR(Service_NWM,
-                          "Connection sequence aborted, because connection status is %u",
+                          "Connection sequence aborted, because connection status is {}",
                           connection_status.status);
                 return;
             }
@@ -610,7 +613,7 @@ void NWM_UDS::RecvBeaconBroadcastData(Kernel::HLERequestContext& ctx) {
     }
 
     // Update the total size in the structure and write it to the buffer again.
-    data_reply_header.total_size = cur_buffer_size;
+    data_reply_header.total_size = static_cast<u32>(cur_buffer_size);
     out_buffer.Write(&data_reply_header, 0, sizeof(BeaconDataReplyHeader));
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
@@ -618,8 +621,8 @@ void NWM_UDS::RecvBeaconBroadcastData(Kernel::HLERequestContext& ctx) {
     rb.PushMappedBuffer(out_buffer);
 
     LOG_DEBUG(Service_NWM,
-              "called out_buffer_size=0x%08X, wlan_comm_id=0x%08X, id=0x%08X,"
-              "unk1=0x%08X, unk2=0x%08X, offset=%zu",
+              "called out_buffer_size=0x{:08X}, wlan_comm_id=0x{:08X}, id=0x{:08X},"
+              "unk1=0x{:08X}, unk2=0x{:08X}, offset={}",
               out_buffer_size, wlan_comm_id, id, unk1, unk2, cur_buffer_size);
 }
 
@@ -660,7 +663,8 @@ void NWM_UDS::InitializeWithVersion(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
     rb.PushCopyObjects(connection_status_event);
 
-    LOG_DEBUG(Service_NWM, "called sharedmem_size=0x%08X, version=0x%08X", sharedmem_size, version);
+    LOG_DEBUG(Service_NWM, "called sharedmem_size=0x{:08X}, version=0x{:08X}", sharedmem_size,
+              version);
 }
 
 void NWM_UDS::GetConnectionStatus(Kernel::HLERequestContext& ctx) {
@@ -727,7 +731,7 @@ void NWM_UDS::Bind(Kernel::HLERequestContext& ctx) {
         IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
         rb.Push(ResultCode(ErrorDescription::NotAuthorized, ErrorModule::UDS,
                            ErrorSummary::WrongArgument, ErrorLevel::Usage));
-        LOG_WARNING(Service_NWM, "data_channel = %d, bind_node_id = %d", data_channel,
+        LOG_WARNING(Service_NWM, "data_channel = {}, bind_node_id = {}", data_channel,
                     bind_node_id);
         return;
     }
@@ -893,7 +897,7 @@ void NWM_UDS::DestroyNetwork(Kernel::HLERequestContext& ctx) {
         IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
         rb.Push(ResultCode(ErrCodes::WrongStatus, ErrorModule::UDS, ErrorSummary::InvalidState,
                            ErrorLevel::Status));
-        LOG_WARNING(Service_NWM, "called with status %u", connection_status.status);
+        LOG_WARNING(Service_NWM, "called with status {}", connection_status.status);
         return;
     }
 
@@ -1000,7 +1004,7 @@ void NWM_UDS::SendTo(Kernel::HLERequestContext& ctx) {
     Network::MacAddress dest_address;
 
     if (flags >> 2) {
-        LOG_ERROR(Service_NWM, "Unexpected flags 0x%02X", flags);
+        LOG_ERROR(Service_NWM, "Unexpected flags 0x{:02X}", flags);
     }
 
     if ((flags & (0x1 << 1)) || dest_node_id == 0xFFFF) {
@@ -1012,7 +1016,7 @@ void NWM_UDS::SendTo(Kernel::HLERequestContext& ctx) {
             std::find_if(node_map.begin(), node_map.end(),
                          [dest_node_id](const auto& node) { return node.second == dest_node_id; });
         if (destination == node_map.end()) {
-            LOG_ERROR(Service_NWM, "tried to send packet to unknown dest id %u", dest_node_id);
+            LOG_ERROR(Service_NWM, "tried to send packet to unknown dest id {}", dest_node_id);
             rb.Push(ResultCode(ErrorDescription::NotFound, ErrorModule::UDS,
                                ErrorSummary::WrongArgument, ErrorLevel::Status));
             return;
@@ -1186,7 +1190,7 @@ void NWM_UDS::SetApplicationData(Kernel::HLERequestContext& ctx) {
         return;
     }
 
-    network_info.application_data_size = size;
+    network_info.application_data_size = static_cast<u8>(size);
     std::memcpy(network_info.application_data.data(), application_data.data(), size);
 
     rb.Push(RESULT_SUCCESS);
@@ -1259,7 +1263,7 @@ void NWM_UDS::DecryptBeaconData(Kernel::HLERequestContext& ctx) {
 }
 
 // Sends a 802.11 beacon frame with information about the current network.
-static void BeaconBroadcastCallback(u64 userdata, int cycles_late) {
+static void BeaconBroadcastCallback(u64 userdata, s64 cycles_late) {
     // Don't do anything if we're not actually hosting a network
     if (connection_status.status != static_cast<u32>(NetworkStatus::ConnectedAsHost))
         return;
@@ -1319,6 +1323,21 @@ NWM_UDS::NWM_UDS() : ServiceFramework("nwm::UDS") {
 
     beacon_broadcast_event =
         CoreTiming::RegisterEvent("UDS::BeaconBroadcastCallback", BeaconBroadcastCallback);
+
+    CryptoPP::AutoSeededRandomPool rng;
+    auto mac = SharedPage::DefaultMac;
+    // Keep the Nintendo 3DS MAC header and randomly generate the last 3 bytes
+    rng.GenerateBlock(static_cast<CryptoPP::byte*>(mac.data() + 3), 3);
+
+    if (auto room_member = Network::GetRoomMember().lock()) {
+        if (room_member->IsConnected()) {
+            mac = room_member->GetMacAddress();
+        }
+    }
+
+    Core::System::GetInstance().GetSharedPageHandler()->SetMacAddress(mac);
+    Core::System::GetInstance().GetSharedPageHandler()->SetWifiLinkLevel(
+        SharedPage::WifiLinkLevel::BEST);
 }
 
 NWM_UDS::~NWM_UDS() {

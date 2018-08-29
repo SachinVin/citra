@@ -35,36 +35,42 @@
 #include "core/arm/arm_interface.h"
 #include "core/core.h"
 #include "core/gdbstub/gdbstub.h"
+#include "core/hle/kernel/process.h"
 #include "core/loader/loader.h"
 #include "core/memory.h"
 
-const int GDB_BUFFER_SIZE = 10000;
+namespace GDBStub {
+namespace {
+constexpr int GDB_BUFFER_SIZE = 10000;
 
-const char GDB_STUB_START = '$';
-const char GDB_STUB_END = '#';
-const char GDB_STUB_ACK = '+';
-const char GDB_STUB_NACK = '-';
+constexpr char GDB_STUB_START = '$';
+constexpr char GDB_STUB_END = '#';
+constexpr char GDB_STUB_ACK = '+';
+constexpr char GDB_STUB_NACK = '-';
 
 #ifndef SIGTRAP
-const u32 SIGTRAP = 5;
+constexpr u32 SIGTRAP = 5;
 #endif
 
 #ifndef SIGTERM
-const u32 SIGTERM = 15;
+constexpr u32 SIGTERM = 15;
 #endif
 
 #ifndef MSG_WAITALL
-const u32 MSG_WAITALL = 8;
+constexpr u32 MSG_WAITALL = 8;
 #endif
 
-const u32 R15_REGISTER = 15;
-const u32 CPSR_REGISTER = 25;
-const u32 FPSCR_REGISTER = 58;
+constexpr u32 SP_REGISTER = 13;
+constexpr u32 LR_REGISTER = 14;
+constexpr u32 PC_REGISTER = 15;
+constexpr u32 CPSR_REGISTER = 25;
+constexpr u32 D0_REGISTER = 26;
+constexpr u32 FPSCR_REGISTER = 42;
 
 // For sample XML files see the GDB source /gdb/features
 // GDB also wants the l character at the start
 // This XML defines what the registers are for this specific ARM device
-static const char* target_xml =
+constexpr char target_xml[] =
     R"(l<?xml version="1.0"?>
 <!DOCTYPE target SYSTEM "gdb-target.dtd">
 <target version="1.0">
@@ -114,27 +120,27 @@ static const char* target_xml =
 </target>
 )";
 
-namespace GDBStub {
+int gdbserver_socket = -1;
 
-static int gdbserver_socket = -1;
+u8 command_buffer[GDB_BUFFER_SIZE];
+u32 command_length;
 
-static u8 command_buffer[GDB_BUFFER_SIZE];
-static u32 command_length;
+u32 latest_signal = 0;
+bool memory_break = false;
 
-static u32 latest_signal = 0;
-static bool step_break = false;
-static bool memory_break = false;
+static Kernel::Thread* current_thread = nullptr;
 
 // Binding to a port within the reserved ports range (0-1023) requires root permissions,
 // so default to a port outside of that range.
-static u16 gdbstub_port = 24689;
+u16 gdbstub_port = 24689;
 
-static bool halt_loop = true;
-static bool step_loop = false;
+bool halt_loop = true;
+bool step_loop = false;
+bool send_trap = false;
 
 // If set to false, the server will never be started and no
 // gdbstub-related functions will be executed.
-static std::atomic<bool> server_enabled(false);
+std::atomic<bool> server_enabled(false);
 
 #ifdef _WIN32
 WSADATA InitData;
@@ -142,13 +148,81 @@ WSADATA InitData;
 
 struct Breakpoint {
     bool active;
-    PAddr addr;
+    VAddr addr;
     u32 len;
+    std::array<u8, 4> inst;
 };
 
-static std::map<u32, Breakpoint> breakpoints_execute;
-static std::map<u32, Breakpoint> breakpoints_read;
-static std::map<u32, Breakpoint> breakpoints_write;
+using BreakpointMap = std::map<VAddr, Breakpoint>;
+BreakpointMap breakpoints_execute;
+BreakpointMap breakpoints_read;
+BreakpointMap breakpoints_write;
+} // Anonymous namespace
+
+static Kernel::Thread* FindThreadById(int id) {
+    const auto& threads = Kernel::GetThreadList();
+    for (auto& thread : threads) {
+        if (thread->GetThreadId() == static_cast<u32>(id)) {
+            return thread.get();
+        }
+    }
+    return nullptr;
+}
+
+static u32 RegRead(std::size_t id, Kernel::Thread* thread = nullptr) {
+    if (!thread) {
+        return 0;
+    }
+
+    if (id <= PC_REGISTER) {
+        return thread->context->GetCpuRegister(id);
+    } else if (id == CPSR_REGISTER) {
+        return thread->context->GetCpsr();
+    } else {
+        return 0;
+    }
+}
+
+static void RegWrite(std::size_t id, u32 val, Kernel::Thread* thread = nullptr) {
+    if (!thread) {
+        return;
+    }
+
+    if (id <= PC_REGISTER) {
+        return thread->context->SetCpuRegister(id, val);
+    } else if (id == CPSR_REGISTER) {
+        return thread->context->SetCpsr(val);
+    }
+}
+
+static u64 FpuRead(std::size_t id, Kernel::Thread* thread = nullptr) {
+    if (!thread) {
+        return 0;
+    }
+
+    if (id >= D0_REGISTER && id < FPSCR_REGISTER) {
+        u64 ret = thread->context->GetFpuRegister(2 * (id - D0_REGISTER));
+        ret |= static_cast<u64>(thread->context->GetFpuRegister(2 * (id - D0_REGISTER) + 1)) << 32;
+        return ret;
+    } else if (id == FPSCR_REGISTER) {
+        return thread->context->GetFpscr();
+    } else {
+        return 0;
+    }
+}
+
+static void FpuWrite(std::size_t id, u64 val, Kernel::Thread* thread = nullptr) {
+    if (!thread) {
+        return;
+    }
+
+    if (id >= D0_REGISTER && id < FPSCR_REGISTER) {
+        thread->context->SetFpuRegister(2 * (id - D0_REGISTER), static_cast<u32>(val));
+        thread->context->SetFpuRegister(2 * (id - D0_REGISTER) + 1, static_cast<u32>(val >> 32));
+    } else if (id == FPSCR_REGISTER) {
+        return thread->context->SetFpscr(static_cast<u32>(val));
+    }
+}
 
 /**
  * Turns hex string character into the equivalent byte.
@@ -164,7 +238,7 @@ static u8 HexCharToValue(u8 hex) {
         return hex - 'A' + 0xA;
     }
 
-    NGLOG_ERROR(Debug_GDBStub, "Invalid nibble: {:c} {:02x}\n", hex, hex);
+    LOG_ERROR(Debug_GDBStub, "Invalid nibble: {:c} {:02x}\n", hex, hex);
     return 0;
 }
 
@@ -178,7 +252,7 @@ static u8 NibbleToHex(u8 n) {
     if (n < 0xA) {
         return '0' + n;
     } else {
-        return 'A' + n - 0xA;
+        return 'a' + n - 0xA;
     }
 }
 
@@ -255,12 +329,41 @@ static u32 GdbHexToInt(const u8* src) {
     return output;
 }
 
+/**
+ * Convert a u64 into a gdb-formatted hex string.
+ *
+ * @param dest Pointer to buffer to store output hex string characters.
+ * @param v    Value to convert.
+ */
+static void LongToGdbHex(u8* dest, u64 v) {
+    for (int i = 0; i < 16; i += 2) {
+        dest[i + 1] = NibbleToHex(static_cast<u8>(v >> (4 * i)));
+        dest[i] = NibbleToHex(static_cast<u8>(v >> (4 * (i + 1))));
+    }
+}
+
+/**
+ * Convert a gdb-formatted hex string into a u64.
+ *
+ * @param src Pointer to hex string.
+ */
+static u64 GdbHexToLong(const u8* src) {
+    u64 output = 0;
+
+    for (int i = 0; i < 16; i += 2) {
+        output = (output << 4) | HexCharToValue(src[15 - i - 1]);
+        output = (output << 4) | HexCharToValue(src[15 - i]);
+    }
+
+    return output;
+}
+
 /// Read a byte from the gdb client.
 static u8 ReadByte() {
     u8 c;
     size_t received_size = recv(gdbserver_socket, reinterpret_cast<char*>(&c), 1, MSG_WAITALL);
     if (received_size != 1) {
-        NGLOG_ERROR(Debug_GDBStub, "recv failed : {}", received_size);
+        LOG_ERROR(Debug_GDBStub, "recv failed : {}", received_size);
         Shutdown();
     }
 
@@ -273,11 +376,11 @@ static u8 CalculateChecksum(const u8* buffer, size_t length) {
 }
 
 /**
- * Get the list of breakpoints for a given breakpoint type.
+ * Get the map of breakpoints for a given breakpoint type.
  *
- * @param type Type of breakpoint list.
+ * @param type Type of breakpoint map.
  */
-static std::map<u32, Breakpoint>& GetBreakpointList(BreakpointType type) {
+static BreakpointMap& GetBreakpointMap(BreakpointType type) {
     switch (type) {
     case BreakpointType::Execute:
         return breakpoints_execute;
@@ -296,20 +399,24 @@ static std::map<u32, Breakpoint>& GetBreakpointList(BreakpointType type) {
  * @param type Type of breakpoint.
  * @param addr Address of breakpoint.
  */
-static void RemoveBreakpoint(BreakpointType type, PAddr addr) {
-    std::map<u32, Breakpoint>& p = GetBreakpointList(type);
+static void RemoveBreakpoint(BreakpointType type, VAddr addr) {
+    BreakpointMap& p = GetBreakpointMap(type);
 
-    auto bp = p.find(addr);
-    if (bp != p.end()) {
-        NGLOG_DEBUG(Debug_GDBStub, "gdb: removed a breakpoint: {:08x} bytes at {:08x} of type {}\n",
-                    bp->second.len, bp->second.addr, static_cast<int>(type));
-        p.erase(addr);
+    const auto bp = p.find(addr);
+    if (bp == p.end()) {
+        return;
     }
+
+    LOG_DEBUG(Debug_GDBStub, "gdb: removed a breakpoint: {:08x} bytes at {:08x} of type {}",
+              bp->second.len, bp->second.addr, static_cast<int>(type));
+    Memory::WriteBlock(bp->second.addr, bp->second.inst.data(), bp->second.inst.size());
+    Core::CPU().ClearInstructionCache();
+    p.erase(addr);
 }
 
-BreakpointAddress GetNextBreakpointFromAddress(PAddr addr, BreakpointType type) {
-    std::map<u32, Breakpoint>& p = GetBreakpointList(type);
-    auto next_breakpoint = p.lower_bound(addr);
+BreakpointAddress GetNextBreakpointFromAddress(VAddr addr, BreakpointType type) {
+    const BreakpointMap& p = GetBreakpointMap(type);
+    const auto next_breakpoint = p.lower_bound(addr);
     BreakpointAddress breakpoint;
 
     if (next_breakpoint != p.end()) {
@@ -323,35 +430,38 @@ BreakpointAddress GetNextBreakpointFromAddress(PAddr addr, BreakpointType type) 
     return breakpoint;
 }
 
-bool CheckBreakpoint(PAddr addr, BreakpointType type) {
+bool CheckBreakpoint(VAddr addr, BreakpointType type) {
     if (!IsConnected()) {
         return false;
     }
 
-    std::map<u32, Breakpoint>& p = GetBreakpointList(type);
+    const BreakpointMap& p = GetBreakpointMap(type);
+    const auto bp = p.find(addr);
 
-    auto bp = p.find(addr);
-    if (bp != p.end()) {
-        u32 len = bp->second.len;
+    if (bp == p.end()) {
+        return false;
+    }
 
-        // IDA Pro defaults to 4-byte breakpoints for all non-hardware breakpoints
-        // no matter if it's a 4-byte or 2-byte instruction. When you execute a
-        // Thumb instruction with a 4-byte breakpoint set, it will set a breakpoint on
-        // two instructions instead of the single instruction you placed the breakpoint
-        // on. So, as a way to make sure that execution breakpoints are only breaking
-        // on the instruction that was specified, set the length of an execution
-        // breakpoint to 1. This should be fine since the CPU should never begin executing
-        // an instruction anywhere except the beginning of the instruction.
-        if (type == BreakpointType::Execute) {
-            len = 1;
-        }
+    u32 len = bp->second.len;
 
-        if (bp->second.active && (addr >= bp->second.addr && addr < bp->second.addr + len)) {
-            NGLOG_DEBUG(Debug_GDBStub,
-                        "Found breakpoint type {} @ {:08x}, range: {:08x} - {:08x} ({} bytes)\n",
-                        static_cast<int>(type), addr, bp->second.addr, bp->second.addr + len, len);
-            return true;
-        }
+    // IDA Pro defaults to 4-byte breakpoints for all non-hardware breakpoints
+    // no matter if it's a 4-byte or 2-byte instruction. When you execute a
+    // Thumb instruction with a 4-byte breakpoint set, it will set a breakpoint on
+    // two instructions instead of the single instruction you placed the breakpoint
+    // on. So, as a way to make sure that execution breakpoints are only breaking
+    // on the instruction that was specified, set the length of an execution
+    // breakpoint to 1. This should be fine since the CPU should never begin executing
+    // an instruction anywhere except the beginning of the instruction.
+    if (type == BreakpointType::Execute) {
+        len = 1;
+    }
+
+    if (bp->second.active && (addr >= bp->second.addr && addr < bp->second.addr + len)) {
+        LOG_DEBUG(Debug_GDBStub,
+                  "Found breakpoint type {} @ {:08x}, range: {:08x}"
+                  " - {:08x} ({:x} bytes)",
+                  static_cast<int>(type), addr, bp->second.addr, bp->second.addr + len, len);
+        return true;
     }
 
     return false;
@@ -365,7 +475,7 @@ bool CheckBreakpoint(PAddr addr, BreakpointType type) {
 static void SendPacket(const char packet) {
     size_t sent_size = send(gdbserver_socket, &packet, 1, 0);
     if (sent_size != 1) {
-        NGLOG_ERROR(Debug_GDBStub, "send failed");
+        LOG_ERROR(Debug_GDBStub, "send failed");
     }
 }
 
@@ -383,7 +493,7 @@ static void SendReply(const char* reply) {
 
     command_length = static_cast<u32>(strlen(reply));
     if (command_length + 4 > sizeof(command_buffer)) {
-        NGLOG_ERROR(Debug_GDBStub, "command_buffer overflow in SendReply");
+        LOG_ERROR(Debug_GDBStub, "command_buffer overflow in SendReply");
         return;
     }
 
@@ -400,7 +510,7 @@ static void SendReply(const char* reply) {
     while (left > 0) {
         int sent_size = send(gdbserver_socket, reinterpret_cast<char*>(ptr), left, 0);
         if (sent_size < 0) {
-            NGLOG_ERROR(Debug_GDBStub, "gdb: send failed");
+            LOG_ERROR(Debug_GDBStub, "gdb: send failed");
             return Shutdown();
         }
 
@@ -411,7 +521,7 @@ static void SendReply(const char* reply) {
 
 /// Handle query command from gdb client.
 static void HandleQuery() {
-    NGLOG_DEBUG(Debug_GDBStub, "gdb: query '{}'\n", command_buffer + 1);
+    LOG_DEBUG(Debug_GDBStub, "gdb: query '{}'\n", command_buffer + 1);
 
     const char* query = reinterpret_cast<const char*>(command_buffer + 1);
 
@@ -419,10 +529,31 @@ static void HandleQuery() {
         SendReply("T0");
     } else if (strncmp(query, "Supported", strlen("Supported")) == 0) {
         // PacketSize needs to be large enough for target xml
-        SendReply("PacketSize=800;qXfer:features:read+");
+        SendReply("PacketSize=2000;qXfer:features:read+;qXfer:threads:read+");
     } else if (strncmp(query, "Xfer:features:read:target.xml:",
                        strlen("Xfer:features:read:target.xml:")) == 0) {
         SendReply(target_xml);
+    } else if (strncmp(query, "fThreadInfo", strlen("fThreadInfo")) == 0) {
+        std::string val = "m";
+        const auto& threads = Kernel::GetThreadList();
+        for (const auto& thread : threads) {
+            val += fmt::format("{:x},", thread->GetThreadId());
+        }
+        val.pop_back();
+        SendReply(val.c_str());
+    } else if (strncmp(query, "sThreadInfo", strlen("sThreadInfo")) == 0) {
+        SendReply("l");
+    } else if (strncmp(query, "Xfer:threads:read", strlen("Xfer:threads:read")) == 0) {
+        std::string buffer;
+        buffer += "l<?xml version=\"1.0\"?>";
+        buffer += "<threads>";
+        const auto& threads = Kernel::GetThreadList();
+        for (const auto& thread : threads) {
+            buffer += fmt::format(R"*(<thread id="{:x}" name="Thread {:x}"></thread>)*",
+                                  thread->GetThreadId(), thread->GetThreadId());
+        }
+        buffer += "</threads>";
+        SendReply(buffer.c_str());
     } else {
         SendReply("");
     }
@@ -430,11 +561,34 @@ static void HandleQuery() {
 
 /// Handle set thread command from gdb client.
 static void HandleSetThread() {
-    if (memcmp(command_buffer, "Hg0", 3) == 0 || memcmp(command_buffer, "Hc-1", 4) == 0 ||
-        memcmp(command_buffer, "Hc0", 4) == 0 || memcmp(command_buffer, "Hc1", 4) == 0) {
-        return SendReply("OK");
+    int thread_id = -1;
+    if (command_buffer[2] != '-') {
+        thread_id = static_cast<int>(HexToInt(command_buffer + 2, command_length - 2));
     }
+    if (thread_id >= 1) {
+        current_thread = FindThreadById(thread_id);
+    }
+    if (!current_thread) {
+        thread_id = 1;
+        current_thread = FindThreadById(thread_id);
+    }
+    if (current_thread) {
+        SendReply("OK");
+        return;
+    }
+    SendReply("E01");
+}
 
+/// Handle thread alive command from gdb client.
+static void HandleThreadAlive() {
+    int thread_id = static_cast<int>(HexToInt(command_buffer + 1, command_length - 1));
+    if (thread_id == 0) {
+        thread_id = 1;
+    }
+    if (FindThreadById(thread_id)) {
+        SendReply("OK");
+        return;
+    }
     SendReply("E01");
 }
 
@@ -443,17 +597,32 @@ static void HandleSetThread() {
  *
  * @param signal Signal to be sent to client.
  */
-static void SendSignal(u32 signal) {
+static void SendSignal(Kernel::Thread* thread, u32 signal, bool full = true) {
     if (gdbserver_socket == -1) {
         return;
     }
 
     latest_signal = signal;
 
-    std::string buffer =
-        Common::StringFromFormat("T%02x%02x:%08x;%02x:%08x;", latest_signal, 15,
-                                 htonl(Core::CPU().GetPC()), 13, htonl(Core::CPU().GetReg(13)));
-    NGLOG_DEBUG(Debug_GDBStub, "Response: {}", buffer);
+    if (!thread) {
+        full = false;
+    }
+
+    std::string buffer;
+    if (full) {
+        buffer = Common::StringFromFormat("T%02x%02x:%08x;%02x:%08x;%02x:%08x", latest_signal,
+                                          PC_REGISTER, htonl(Core::CPU().GetPC()), SP_REGISTER,
+                                          htonl(Core::CPU().GetReg(SP_REGISTER)), LR_REGISTER,
+                                          htonl(Core::CPU().GetReg(LR_REGISTER)));
+    } else {
+        buffer = Common::StringFromFormat("T%02x", latest_signal);
+    }
+
+    if (thread) {
+        buffer += Common::StringFromFormat(";thread:%x;", thread->GetThreadId());
+    }
+
+    LOG_DEBUG(Debug_GDBStub, "Response: {}", buffer);
     SendReply(buffer.c_str());
 }
 
@@ -467,18 +636,18 @@ static void ReadCommand() {
         // ignore ack
         return;
     } else if (c == 0x03) {
-        NGLOG_INFO(Debug_GDBStub, "gdb: found break command\n");
+        LOG_INFO(Debug_GDBStub, "gdb: found break command\n");
         halt_loop = true;
-        SendSignal(SIGTRAP);
+        SendSignal(current_thread, SIGTRAP);
         return;
     } else if (c != GDB_STUB_START) {
-        NGLOG_DEBUG(Debug_GDBStub, "gdb: read invalid byte {:02x}\n", c);
+        LOG_DEBUG(Debug_GDBStub, "gdb: read invalid byte {:02x}\n", c);
         return;
     }
 
     while ((c = ReadByte()) != GDB_STUB_END) {
         if (command_length >= sizeof(command_buffer)) {
-            NGLOG_ERROR(Debug_GDBStub, "gdb: command_buffer overflow\n");
+            LOG_ERROR(Debug_GDBStub, "gdb: command_buffer overflow\n");
             SendPacket(GDB_STUB_NACK);
             return;
         }
@@ -491,7 +660,7 @@ static void ReadCommand() {
     u8 checksum_calculated = CalculateChecksum(command_buffer, command_length);
 
     if (checksum_received != checksum_calculated) {
-        NGLOG_ERROR(
+        LOG_ERROR(
             Debug_GDBStub,
             "gdb: invalid checksum: calculated {:02x} and read {:02x} for ${}# (length: {})\n",
             checksum_calculated, checksum_received, command_buffer, command_length);
@@ -521,7 +690,7 @@ static bool IsDataAvailable() {
     t.tv_usec = 0;
 
     if (select(gdbserver_socket + 1, &fd_socket, nullptr, nullptr, &t) < 0) {
-        NGLOG_ERROR(Debug_GDBStub, "select failed");
+        LOG_ERROR(Debug_GDBStub, "select failed");
         return false;
     }
 
@@ -539,17 +708,14 @@ static void ReadRegister() {
         id |= HexCharToValue(command_buffer[2]);
     }
 
-    if (id <= R15_REGISTER) {
-        IntToGdbHex(reply, Core::CPU().GetReg(id));
+    if (id <= PC_REGISTER) {
+        IntToGdbHex(reply, RegRead(id, current_thread));
     } else if (id == CPSR_REGISTER) {
-        IntToGdbHex(reply, Core::CPU().GetCPSR());
-    } else if (id > CPSR_REGISTER && id < FPSCR_REGISTER) {
-        IntToGdbHex(reply, Core::CPU().GetVFPReg(
-                               id - CPSR_REGISTER -
-                               1)); // VFP registers should start at 26, so one after CSPR_REGISTER
+        IntToGdbHex(reply, RegRead(id, current_thread));
+    } else if (id >= D0_REGISTER && id < FPSCR_REGISTER) {
+        LongToGdbHex(reply, FpuRead(id, current_thread));
     } else if (id == FPSCR_REGISTER) {
-        IntToGdbHex(reply, Core::CPU().GetVFPSystemReg(VFP_FPSCR)); // Get FPSCR
-        IntToGdbHex(reply + 8, 0);
+        IntToGdbHex(reply, static_cast<u32>(FpuRead(id, current_thread)));
     } else {
         return SendReply("E01");
     }
@@ -564,23 +730,23 @@ static void ReadRegisters() {
 
     u8* bufptr = buffer;
 
-    for (int reg = 0; reg <= R15_REGISTER; reg++) {
-        IntToGdbHex(bufptr + reg * CHAR_BIT, Core::CPU().GetReg(reg));
+    for (u32 reg = 0; reg <= PC_REGISTER; reg++) {
+        IntToGdbHex(bufptr + reg * 8, RegRead(reg, current_thread));
     }
 
-    bufptr += (16 * CHAR_BIT);
+    bufptr += 16 * 8;
 
-    IntToGdbHex(bufptr, Core::CPU().GetCPSR());
+    IntToGdbHex(bufptr, RegRead(CPSR_REGISTER, current_thread));
 
-    bufptr += CHAR_BIT;
+    bufptr += 8;
 
-    for (int reg = 0; reg <= 31; reg++) {
-        IntToGdbHex(bufptr + reg * CHAR_BIT, Core::CPU().GetVFPReg(reg));
+    for (u32 reg = D0_REGISTER; reg < FPSCR_REGISTER; reg++) {
+        LongToGdbHex(bufptr + reg * 16, FpuRead(reg, current_thread));
     }
 
-    bufptr += (32 * CHAR_BIT);
+    bufptr += 16 * 16;
 
-    IntToGdbHex(bufptr, Core::CPU().GetVFPSystemReg(VFP_FPSCR));
+    IntToGdbHex(bufptr, static_cast<u32>(FpuRead(FPSCR_REGISTER, current_thread)));
 
     SendReply(reinterpret_cast<char*>(buffer));
 }
@@ -596,17 +762,19 @@ static void WriteRegister() {
         id |= HexCharToValue(command_buffer[2]);
     }
 
-    if (id <= R15_REGISTER) {
-        Core::CPU().SetReg(id, GdbHexToInt(buffer_ptr));
+    if (id <= PC_REGISTER) {
+        RegWrite(id, GdbHexToInt(buffer_ptr), current_thread);
     } else if (id == CPSR_REGISTER) {
-        Core::CPU().SetCPSR(GdbHexToInt(buffer_ptr));
-    } else if (id > CPSR_REGISTER && id < FPSCR_REGISTER) {
-        Core::CPU().SetVFPReg(id - CPSR_REGISTER - 1, GdbHexToInt(buffer_ptr));
+        RegWrite(id, GdbHexToInt(buffer_ptr), current_thread);
+    } else if (id >= D0_REGISTER && id < FPSCR_REGISTER) {
+        FpuWrite(id, GdbHexToLong(buffer_ptr), current_thread);
     } else if (id == FPSCR_REGISTER) {
-        Core::CPU().SetVFPSystemReg(VFP_FPSCR, GdbHexToInt(buffer_ptr));
+        FpuWrite(id, GdbHexToInt(buffer_ptr), current_thread);
     } else {
         return SendReply("E01");
     }
+
+    Core::CPU().LoadContext(current_thread->context);
 
     SendReply("OK");
 }
@@ -618,23 +786,25 @@ static void WriteRegisters() {
     if (command_buffer[0] != 'G')
         return SendReply("E01");
 
-    for (int i = 0, reg = 0; reg <= FPSCR_REGISTER; i++, reg++) {
-        if (reg <= R15_REGISTER) {
-            Core::CPU().SetReg(reg, GdbHexToInt(buffer_ptr + i * CHAR_BIT));
+    for (u32 i = 0, reg = 0; reg <= FPSCR_REGISTER; i++, reg++) {
+        if (reg <= PC_REGISTER) {
+            RegWrite(reg, GdbHexToInt(buffer_ptr + i * 8));
         } else if (reg == CPSR_REGISTER) {
-            Core::CPU().SetCPSR(GdbHexToInt(buffer_ptr + i * CHAR_BIT));
+            RegWrite(reg, GdbHexToInt(buffer_ptr + i * 8));
         } else if (reg == CPSR_REGISTER - 1) {
             // Dummy FPA register, ignore
         } else if (reg < CPSR_REGISTER) {
             // Dummy FPA registers, ignore
             i += 2;
-        } else if (reg > CPSR_REGISTER && reg < FPSCR_REGISTER) {
-            Core::CPU().SetVFPReg(reg - CPSR_REGISTER - 1, GdbHexToInt(buffer_ptr + i * CHAR_BIT));
+        } else if (reg >= D0_REGISTER && reg < FPSCR_REGISTER) {
+            FpuWrite(reg, GdbHexToLong(buffer_ptr + i * 16));
             i++; // Skip padding
         } else if (reg == FPSCR_REGISTER) {
-            Core::CPU().SetVFPSystemReg(VFP_FPSCR, GdbHexToInt(buffer_ptr + i * CHAR_BIT));
+            FpuWrite(reg, GdbHexToInt(buffer_ptr + i * 8));
         }
     }
+
+    Core::CPU().LoadContext(current_thread->context);
 
     SendReply("OK");
 }
@@ -651,7 +821,7 @@ static void ReadMemory() {
     u32 len =
         HexToInt(start_offset, static_cast<u32>((command_buffer + command_length) - start_offset));
 
-    NGLOG_DEBUG(Debug_GDBStub, "gdb: addr: {:08x} len: {:08x}\n", addr, len);
+    LOG_DEBUG(Debug_GDBStub, "gdb: addr: {:08x} len: {:08x}\n", addr, len);
 
     if (len * 2 > sizeof(reply)) {
         SendReply("E01");
@@ -687,24 +857,26 @@ static void WriteMemory() {
 
     GdbHexToMem(data.data(), len_pos + 1, len);
     Memory::WriteBlock(addr, data.data(), len);
+    Core::CPU().ClearInstructionCache();
     SendReply("OK");
 }
 
 void Break(bool is_memory_break) {
-    if (!halt_loop) {
-        halt_loop = true;
-        SendSignal(SIGTRAP);
-    }
+    send_trap = true;
 
     memory_break = is_memory_break;
 }
 
 /// Tell the CPU that it should perform a single step.
 static void Step() {
+    if (command_length > 1) {
+        RegWrite(PC_REGISTER, GdbHexToInt(command_buffer + 1), current_thread);
+        Core::CPU().LoadContext(current_thread->context);
+    }
     step_loop = true;
     halt_loop = true;
-    step_break = true;
-    SendSignal(SIGTRAP);
+    send_trap = true;
+    Core::CPU().ClearInstructionCache();
 }
 
 bool IsMemoryBreak() {
@@ -718,9 +890,9 @@ bool IsMemoryBreak() {
 /// Tell the CPU to continue executing.
 static void Continue() {
     memory_break = false;
-    step_break = false;
     step_loop = false;
     halt_loop = false;
+    Core::CPU().ClearInstructionCache();
 }
 
 /**
@@ -730,17 +902,21 @@ static void Continue() {
  * @param addr Address of breakpoint.
  * @param len Length of breakpoint.
  */
-static bool CommitBreakpoint(BreakpointType type, PAddr addr, u32 len) {
-    std::map<u32, Breakpoint>& p = GetBreakpointList(type);
+static bool CommitBreakpoint(BreakpointType type, VAddr addr, u32 len) {
+    BreakpointMap& p = GetBreakpointMap(type);
 
     Breakpoint breakpoint;
     breakpoint.active = true;
     breakpoint.addr = addr;
     breakpoint.len = len;
+    Memory::ReadBlock(addr, breakpoint.inst.data(), breakpoint.inst.size());
+    static constexpr std::array<u8, 4> btrap{0x70, 0x00, 0x20, 0xe1};
+    Memory::WriteBlock(addr, btrap.data(), btrap.size());
+    Core::CPU().ClearInstructionCache();
     p.insert({addr, breakpoint});
 
-    NGLOG_DEBUG(Debug_GDBStub, "gdb: added {} breakpoint: {:08x} bytes at {:08x}\n",
-                static_cast<int>(type), breakpoint.len, breakpoint.addr);
+    LOG_DEBUG(Debug_GDBStub, "gdb: added {} breakpoint: {:08x} bytes at {:08x}\n",
+              static_cast<int>(type), breakpoint.len, breakpoint.addr);
 
     return true;
 }
@@ -770,7 +946,7 @@ static void AddBreakpoint() {
 
     auto start_offset = command_buffer + 3;
     auto addr_pos = std::find(start_offset, command_buffer + command_length, ',');
-    PAddr addr = HexToInt(start_offset, static_cast<u32>(addr_pos - start_offset));
+    VAddr addr = HexToInt(start_offset, static_cast<u32>(addr_pos - start_offset));
 
     start_offset = addr_pos + 1;
     u32 len =
@@ -819,7 +995,7 @@ static void RemoveBreakpoint() {
 
     auto start_offset = command_buffer + 3;
     auto addr_pos = std::find(start_offset, command_buffer + command_length, ',');
-    PAddr addr = HexToInt(start_offset, static_cast<u32>(addr_pos - start_offset));
+    VAddr addr = HexToInt(start_offset, static_cast<u32>(addr_pos - start_offset));
 
     if (type == BreakpointType::Access) {
         // Access is made up of Read and Write types, so add both breakpoints
@@ -847,7 +1023,7 @@ void HandlePacket() {
         return;
     }
 
-    NGLOG_DEBUG(Debug_GDBStub, "Packet: {}", command_buffer);
+    LOG_DEBUG(Debug_GDBStub, "Packet: {}", command_buffer);
 
     switch (command_buffer[0]) {
     case 'q':
@@ -857,11 +1033,11 @@ void HandlePacket() {
         HandleSetThread();
         break;
     case '?':
-        SendSignal(latest_signal);
+        SendSignal(current_thread, latest_signal);
         break;
     case 'k':
         Shutdown();
-        NGLOG_INFO(Debug_GDBStub, "killed by gdb");
+        LOG_INFO(Debug_GDBStub, "killed by gdb");
         return;
     case 'g':
         ReadRegisters();
@@ -893,6 +1069,9 @@ void HandlePacket() {
         break;
     case 'Z':
         AddBreakpoint();
+        break;
+    case 'T':
+        HandleThreadAlive();
         break;
     default:
         SendReply("");
@@ -940,7 +1119,7 @@ static void Init(u16 port) {
     breakpoints_write.clear();
 
     // Start gdb server
-    NGLOG_INFO(Debug_GDBStub, "Starting GDB server on port {}...", port);
+    LOG_INFO(Debug_GDBStub, "Starting GDB server on port {}...", port);
 
     sockaddr_in saddr_server = {};
     saddr_server.sin_family = AF_INET;
@@ -953,28 +1132,28 @@ static void Init(u16 port) {
 
     int tmpsock = static_cast<int>(socket(PF_INET, SOCK_STREAM, 0));
     if (tmpsock == -1) {
-        NGLOG_ERROR(Debug_GDBStub, "Failed to create gdb socket");
+        LOG_ERROR(Debug_GDBStub, "Failed to create gdb socket");
     }
 
     // Set socket to SO_REUSEADDR so it can always bind on the same port
     int reuse_enabled = 1;
     if (setsockopt(tmpsock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse_enabled,
                    sizeof(reuse_enabled)) < 0) {
-        NGLOG_ERROR(Debug_GDBStub, "Failed to set gdb socket option");
+        LOG_ERROR(Debug_GDBStub, "Failed to set gdb socket option");
     }
 
     const sockaddr* server_addr = reinterpret_cast<const sockaddr*>(&saddr_server);
     socklen_t server_addrlen = sizeof(saddr_server);
     if (bind(tmpsock, server_addr, server_addrlen) < 0) {
-        NGLOG_ERROR(Debug_GDBStub, "Failed to bind gdb socket");
+        LOG_ERROR(Debug_GDBStub, "Failed to bind gdb socket");
     }
 
     if (listen(tmpsock, 1) < 0) {
-        NGLOG_ERROR(Debug_GDBStub, "Failed to listen to gdb socket");
+        LOG_ERROR(Debug_GDBStub, "Failed to listen to gdb socket");
     }
 
     // Wait for gdb to connect
-    NGLOG_INFO(Debug_GDBStub, "Waiting for gdb to connect...\n");
+    LOG_INFO(Debug_GDBStub, "Waiting for gdb to connect...\n");
     sockaddr_in saddr_client;
     sockaddr* client_addr = reinterpret_cast<sockaddr*>(&saddr_client);
     socklen_t client_addrlen = sizeof(saddr_client);
@@ -985,9 +1164,9 @@ static void Init(u16 port) {
         halt_loop = false;
         step_loop = false;
 
-        NGLOG_ERROR(Debug_GDBStub, "Failed to accept gdb client");
+        LOG_ERROR(Debug_GDBStub, "Failed to accept gdb client");
     } else {
-        NGLOG_INFO(Debug_GDBStub, "Client connected.\n");
+        LOG_INFO(Debug_GDBStub, "Client connected.\n");
         saddr_client.sin_addr.s_addr = ntohl(saddr_client.sin_addr.s_addr);
     }
 
@@ -1006,7 +1185,7 @@ void Shutdown() {
         return;
     }
 
-    NGLOG_INFO(Debug_GDBStub, "Stopping GDB ...");
+    LOG_INFO(Debug_GDBStub, "Stopping GDB ...");
     if (gdbserver_socket != -1) {
         shutdown(gdbserver_socket, SHUT_RDWR);
         gdbserver_socket = -1;
@@ -1016,7 +1195,7 @@ void Shutdown() {
     WSACleanup();
 #endif
 
-    NGLOG_INFO(Debug_GDBStub, "GDB stopped.");
+    LOG_INFO(Debug_GDBStub, "GDB stopped.");
 }
 
 bool IsServerEnabled() {
@@ -1037,5 +1216,18 @@ bool GetCpuStepFlag() {
 
 void SetCpuStepFlag(bool is_step) {
     step_loop = is_step;
+}
+
+void SendTrap(Kernel::Thread* thread, int trap) {
+    if (!send_trap) {
+        return;
+    }
+
+    if (!halt_loop || current_thread == thread) {
+        current_thread = thread;
+        SendSignal(thread, trap);
+    }
+    halt_loop = true;
+    send_trap = false;
 }
 }; // namespace GDBStub

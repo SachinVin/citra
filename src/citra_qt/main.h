@@ -9,6 +9,7 @@
 #include <QMainWindow>
 #include <QTimer>
 #include <QTranslator>
+#include "citra_qt/hotkeys.h"
 #include "common/announce_multiplayer_room.h"
 #include "core/core.h"
 #include "core/hle/service/am/am.h"
@@ -20,6 +21,7 @@ class ClickableLabel;
 class EmuThread;
 class GameList;
 enum class GameListOpenTarget;
+class GameListPlaceholder;
 class GImageInfo;
 class GPUCommandListWidget;
 class GPUCommandStreamWidget;
@@ -27,6 +29,7 @@ class GraphicsBreakPointsWidget;
 class GraphicsTracingWidget;
 class GraphicsVertexShaderWidget;
 class GRenderWindow;
+class LLEServiceModulesWidget;
 class MicroProfileDialog;
 class MultiplayerState;
 class ProfilerWidget;
@@ -36,6 +39,9 @@ class QProgressBar;
 class RegistersWidget;
 class Updater;
 class WaitTreeWidget;
+namespace DiscordRPC {
+class DiscordInterface;
+}
 
 class GMainWindow : public QMainWindow {
     Q_OBJECT
@@ -59,6 +65,7 @@ public:
     ~GMainWindow();
 
     GameList* game_list;
+    std::unique_ptr<DiscordRPC::DiscordInterface> discord_rpc;
 
 signals:
 
@@ -101,11 +108,12 @@ private:
     void BootGame(const QString& filename);
     void ShutdownGame();
 
-    void ShowCallouts();
+    void ShowTelemetryCallout();
     void ShowUpdaterWidgets();
     void ShowUpdatePrompt();
     void ShowNoUpdatePrompt();
     void CheckForUpdates();
+    void SetDiscordEnabled(bool state);
 
     /**
      * Stores the filename in the recently loaded files list.
@@ -148,13 +156,14 @@ private slots:
     void OnGameListNavigateToGamedbEntry(
         u64 program_id,
         std::unordered_map<std::string, std::pair<QString, QString>>& compatibility_list);
+    void OnGameListOpenDirectory(QString path);
+    void OnGameListAddDirectory();
+    void OnGameListShowList(bool show);
     void OnMenuLoadFile();
     void OnMenuInstallCIA();
     void OnUpdateProgress(size_t written, size_t total);
     void OnCIAInstallReport(Service::AM::InstallStatus status, QString filepath);
     void OnCIAInstallFinished();
-    /// Called whenever a user selects the "File->Select Game List Root" menu item
-    void OnMenuSelectGameListRoot();
     void OnMenuRecentFile();
     void OnConfigure();
     void OnToggleFilterBar();
@@ -167,6 +176,9 @@ private slots:
     void HideFullscreen();
     void ToggleWindowMode();
     void OnCreateGraphicsSurfaceViewer();
+    void OnRecordMovie();
+    void OnPlayMovie();
+    void OnStopRecordingPlayback();
     void OnCoreError(Core::System::ResultStatus, std::string);
     /// Called whenever a user selects Help->About Citra
     void OnMenuAboutCitra();
@@ -176,13 +188,18 @@ private slots:
     void OnLanguageChanged(const QString& locale);
 
 private:
+    bool ValidateMovie(const QString& path, u64 program_id = 0);
+    Q_INVOKABLE void OnMoviePlaybackCompleted();
     void UpdateStatusBar();
     void LoadTranslation();
     void SetupUIStrings();
+    void RetranslateStatusBar();
 
     Ui::MainWindow ui;
 
     GRenderWindow* render_window;
+
+    GameListPlaceholder* game_list_placeholder;
 
     // Status bar elements
     QProgressBar* progress_bar = nullptr;
@@ -198,6 +215,14 @@ private:
     // Whether emulation is currently running in Citra.
     bool emulation_running = false;
     std::unique_ptr<EmuThread> emu_thread;
+    // The title of the game currently running
+    QString game_title;
+    // The path to the game currently running
+    QString game_path;
+
+    // Movie
+    bool movie_record_on_start = false;
+    QString movie_record_path;
 
     // Debugger panes
     ProfilerWidget* profilerWidget;
@@ -208,6 +233,7 @@ private:
     GraphicsBreakPointsWidget* graphicsBreakpointsWidget;
     GraphicsVertexShaderWidget* graphicsVertexShaderWidget;
     GraphicsTracingWidget* graphicsTracingWidget;
+    LLEServiceModulesWidget* lleServiceModulesWidget;
     WaitTreeWidget* waitTreeWidget;
     Updater* updater;
 
@@ -220,6 +246,8 @@ private:
 
     // stores default icon theme search paths for the platform
     QStringList default_theme_paths;
+
+    HotkeyRegistry hotkey_registry;
 
 protected:
     void dropEvent(QDropEvent* event) override;

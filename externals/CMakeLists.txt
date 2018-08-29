@@ -42,6 +42,9 @@ target_include_directories(microprofile INTERFACE ./microprofile)
 add_library(nihstro-headers INTERFACE)
 target_include_directories(nihstro-headers INTERFACE ./nihstro/include)
 
+# Open Source Archives
+add_subdirectory(open_source_archives)
+
 # SoundTouch
 add_subdirectory(soundtouch)
 # The SoundTouch target doesn't export the necessary include paths as properties by default
@@ -58,6 +61,18 @@ endif()
 # ENet
 add_subdirectory(enet)
 target_include_directories(enet INTERFACE ./enet/include)
+
+# Cubeb
+if (ENABLE_CUBEB)
+    set(BUILD_TESTS OFF CACHE BOOL "")
+    add_subdirectory(cubeb EXCLUDE_FROM_ALL)
+endif()
+
+# DiscordRPC
+if (USE_DISCORD_PRESENCE)
+    add_subdirectory(discord-rpc)
+    target_include_directories(discord-rpc INTERFACE ./discord-rpc/include)
+endif()
 
 if (ENABLE_WEB_SERVICE)
     # LibreSSL
@@ -76,10 +91,4 @@ if (ENABLE_WEB_SERVICE)
     # JSON
     add_library(json-headers INTERFACE)
     target_include_directories(json-headers INTERFACE ./json)
-endif()
-
-# Cubeb
-if(ENABLE_CUBEB)
-    set(BUILD_TESTS OFF CACHE BOOL "")
-    add_subdirectory(cubeb EXCLUDE_FROM_ALL)
 endif()

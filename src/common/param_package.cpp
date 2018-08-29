@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <array>
+#include <utility>
 #include <vector>
 #include "common/logging/log.h"
 #include "common/param_package.h"
@@ -12,10 +13,11 @@ namespace Common {
 
 constexpr char KEY_VALUE_SEPARATOR = ':';
 constexpr char PARAM_SEPARATOR = ',';
+
 constexpr char ESCAPE_CHARACTER = '$';
-const std::string KEY_VALUE_SEPARATOR_ESCAPE{ESCAPE_CHARACTER, '0'};
-const std::string PARAM_SEPARATOR_ESCAPE{ESCAPE_CHARACTER, '1'};
-const std::string ESCAPE_CHARACTER_ESCAPE{ESCAPE_CHARACTER, '2'};
+constexpr char KEY_VALUE_SEPARATOR_ESCAPE[] = "$0";
+constexpr char PARAM_SEPARATOR_ESCAPE[] = "$1";
+constexpr char ESCAPE_CHARACTER_ESCAPE[] = "$2";
 
 ParamPackage::ParamPackage(const std::string& serialized) {
     std::vector<std::string> pairs;
@@ -25,7 +27,7 @@ ParamPackage::ParamPackage(const std::string& serialized) {
         std::vector<std::string> key_value;
         Common::SplitString(pair, KEY_VALUE_SEPARATOR, key_value);
         if (key_value.size() != 2) {
-            NGLOG_ERROR(Common, "invalid key pair {}", pair);
+            LOG_ERROR(Common, "invalid key pair {}", pair);
             continue;
         }
 
@@ -35,7 +37,7 @@ ParamPackage::ParamPackage(const std::string& serialized) {
             part = Common::ReplaceAll(part, ESCAPE_CHARACTER_ESCAPE, {ESCAPE_CHARACTER});
         }
 
-        Set(key_value[0], key_value[1]);
+        Set(key_value[0], std::move(key_value[1]));
     }
 }
 
@@ -64,7 +66,7 @@ std::string ParamPackage::Serialize() const {
 std::string ParamPackage::Get(const std::string& key, const std::string& default_value) const {
     auto pair = data.find(key);
     if (pair == data.end()) {
-        NGLOG_DEBUG(Common, "key {} not found", key);
+        LOG_DEBUG(Common, "key {} not found", key);
         return default_value;
     }
 
@@ -74,14 +76,14 @@ std::string ParamPackage::Get(const std::string& key, const std::string& default
 int ParamPackage::Get(const std::string& key, int default_value) const {
     auto pair = data.find(key);
     if (pair == data.end()) {
-        NGLOG_DEBUG(Common, "key {} not found", key);
+        LOG_DEBUG(Common, "key {} not found", key);
         return default_value;
     }
 
     try {
         return std::stoi(pair->second);
     } catch (const std::logic_error&) {
-        NGLOG_ERROR(Common, "failed to convert {} to int", pair->second);
+        LOG_ERROR(Common, "failed to convert {} to int", pair->second);
         return default_value;
     }
 }
@@ -89,28 +91,28 @@ int ParamPackage::Get(const std::string& key, int default_value) const {
 float ParamPackage::Get(const std::string& key, float default_value) const {
     auto pair = data.find(key);
     if (pair == data.end()) {
-        NGLOG_DEBUG(Common, "key {} not found", key);
+        LOG_DEBUG(Common, "key {} not found", key);
         return default_value;
     }
 
     try {
         return std::stof(pair->second);
     } catch (const std::logic_error&) {
-        NGLOG_ERROR(Common, "failed to convert {} to float", pair->second);
+        LOG_ERROR(Common, "failed to convert {} to float", pair->second);
         return default_value;
     }
 }
 
-void ParamPackage::Set(const std::string& key, const std::string& value) {
-    data[key] = value;
+void ParamPackage::Set(const std::string& key, std::string value) {
+    data.insert_or_assign(key, std::move(value));
 }
 
 void ParamPackage::Set(const std::string& key, int value) {
-    data[key] = std::to_string(value);
+    data.insert_or_assign(key, std::to_string(value));
 }
 
 void ParamPackage::Set(const std::string& key, float value) {
-    data[key] = std::to_string(value);
+    data.insert_or_assign(key, std::to_string(value));
 }
 
 bool ParamPackage::Has(const std::string& key) const {

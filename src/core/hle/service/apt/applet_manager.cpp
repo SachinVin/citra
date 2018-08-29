@@ -170,7 +170,7 @@ void AppletManager::CancelAndSendParameter(const MessageParameter& parameter) {
     // Signal the event to let the receiver know that a new parameter is ready to be read
     auto* const slot_data = GetAppletSlotData(static_cast<AppletId>(parameter.destination_id));
     if (slot_data == nullptr) {
-        LOG_DEBUG(Service_APT, "No applet was registered with the id %03X",
+        LOG_DEBUG(Service_APT, "No applet was registered with the id {:03X}",
                   static_cast<u32>(parameter.destination_id));
         return;
     }
@@ -321,15 +321,18 @@ ResultCode AppletManager::PrepareToStartLibraryApplet(AppletId applet_id) {
                           ErrorSummary::InvalidState, ErrorLevel::Status);
     }
 
-    auto process = NS::LaunchTitle(FS::MediaType::NAND, GetTitleIdForApplet(applet_id));
-    if (process) {
-        return RESULT_SUCCESS;
-    }
+    // There are some problems with LLE applets. The rasterizer cache gets out of sync
+    // when the applet is closed. To avoid breaking applications because of the issue,
+    // we are going to disable loading LLE applets before further fixes are done.
+    //    auto process = NS::LaunchTitle(FS::MediaType::NAND, GetTitleIdForApplet(applet_id));
+    //    if (process) {
+    //        return RESULT_SUCCESS;
+    //    }
 
     // If we weren't able to load the native applet title, try to fallback to an HLE implementation.
     auto applet = HLE::Applets::Applet::Get(applet_id);
     if (applet) {
-        LOG_WARNING(Service_APT, "applet has already been started id=%08X",
+        LOG_WARNING(Service_APT, "applet has already been started id={:08X}",
                     static_cast<u32>(applet_id));
         return RESULT_SUCCESS;
     } else {
@@ -345,15 +348,18 @@ ResultCode AppletManager::PreloadLibraryApplet(AppletId applet_id) {
                           ErrorSummary::InvalidState, ErrorLevel::Status);
     }
 
-    auto process = NS::LaunchTitle(FS::MediaType::NAND, GetTitleIdForApplet(applet_id));
-    if (process) {
-        return RESULT_SUCCESS;
-    }
+    // There are some problems with LLE applets. The rasterizer cache gets out of sync
+    // when the applet is closed. To avoid breaking applications because of the issue,
+    // we are going to disable loading LLE applets before further fixes are done.
+    //    auto process = NS::LaunchTitle(FS::MediaType::NAND, GetTitleIdForApplet(applet_id));
+    //    if (process) {
+    //        return RESULT_SUCCESS;
+    //    }
 
     // If we weren't able to load the native applet title, try to fallback to an HLE implementation.
     auto applet = HLE::Applets::Applet::Get(applet_id);
     if (applet) {
-        LOG_WARNING(Service_APT, "applet has already been started id=%08X",
+        LOG_WARNING(Service_APT, "applet has already been started id={:08X}",
                     static_cast<u32>(applet_id));
         return RESULT_SUCCESS;
     } else {
@@ -390,6 +396,49 @@ ResultCode AppletManager::StartLibraryApplet(AppletId applet_id,
     }
 }
 
+ResultCode AppletManager::PrepareToCloseLibraryApplet(bool not_pause, bool exiting,
+                                                      bool jump_home) {
+    if (next_parameter) {
+        return ResultCode(ErrCodes::ParameterPresent, ErrorModule::Applet,
+                          ErrorSummary::InvalidState, ErrorLevel::Status);
+    }
+
+    if (!not_pause)
+        library_applet_closing_command = SignalType::WakeupByPause;
+    else if (jump_home)
+        library_applet_closing_command = SignalType::WakeupToJumpHome;
+    else if (exiting)
+        library_applet_closing_command = SignalType::WakeupByCancel;
+    else
+        library_applet_closing_command = SignalType::WakeupByExit;
+
+    return RESULT_SUCCESS;
+}
+
+ResultCode AppletManager::CloseLibraryApplet(Kernel::SharedPtr<Kernel::Object> object,
+                                             std::vector<u8> buffer) {
+    auto& slot = applet_slots[static_cast<size_t>(AppletSlot::LibraryApplet)];
+
+    MessageParameter param;
+    // TODO(Subv): The destination id should be the "current applet slot id", which changes
+    // constantly depending on what is going on in the system. Most of the time it is the running
+    // application, but it could be something else if a system applet is launched.
+    param.destination_id = AppletId::Application;
+    param.sender_id = slot.applet_id;
+    param.object = std::move(object);
+    param.signal = library_applet_closing_command;
+    param.buffer = std::move(buffer);
+
+    ResultCode result = SendParameter(param);
+
+    if (library_applet_closing_command != SignalType::WakeupByPause) {
+        // TODO(Subv): Terminate the running applet title
+        slot.Reset();
+    }
+
+    return result;
+}
+
 ResultVal<AppletManager::AppletInfo> AppletManager::GetAppletInfo(AppletId app_id) {
     const auto* slot = GetAppletSlotData(app_id);
 
@@ -400,7 +449,8 @@ ResultVal<AppletManager::AppletInfo> AppletManager::GetAppletInfo(AppletId app_i
             return ResultCode(ErrorDescription::NotFound, ErrorModule::Applet,
                               ErrorSummary::NotFound, ErrorLevel::Status);
         }
-        LOG_WARNING(Service_APT, "Using HLE applet info for applet %03X", static_cast<u32>(app_id));
+        LOG_WARNING(Service_APT, "Using HLE applet info for applet {:03X}",
+                    static_cast<u32>(app_id));
         // TODO(Subv): Get the title id for the current applet and write it in the response[2-3]
         return MakeResult<AppletInfo>({0, Service::FS::MediaType::NAND, true, true, 0});
     }

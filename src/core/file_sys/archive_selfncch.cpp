@@ -94,7 +94,7 @@ public:
 
         std::vector<u8> binary = path.AsBinary();
         if (binary.size() != sizeof(SelfNCCHFilePath)) {
-            LOG_ERROR(Service_FS, "Wrong path size %zu", binary.size());
+            LOG_ERROR(Service_FS, "Wrong path size {}", binary.size());
             return ERROR_INVALID_PATH;
         }
 
@@ -119,7 +119,7 @@ public:
             return OpenExeFS(filename);
         }
         default:
-            LOG_ERROR(Service_FS, "Unknown file type %u!", static_cast<u32>(file_path.type));
+            LOG_ERROR(Service_FS, "Unknown file type {}!", static_cast<u32>(file_path.type));
             return ERROR_INVALID_PATH;
         }
     }
@@ -174,8 +174,7 @@ private:
             std::unique_ptr<DelayGenerator> delay_generator =
                 std::make_unique<RomFSDelayGenerator>();
             return MakeResult<std::unique_ptr<FileBackend>>(
-                std::make_unique<IVFCFile>(ncch_data.romfs_file, ncch_data.romfs_offset,
-                                           ncch_data.romfs_size, std::move(delay_generator)));
+                std::make_unique<IVFCFile>(ncch_data.romfs_file, std::move(delay_generator)));
         } else {
             LOG_INFO(Service_FS, "Unable to read RomFS");
             return ERROR_ROMFS_NOT_FOUND;
@@ -187,8 +186,7 @@ private:
             std::unique_ptr<DelayGenerator> delay_generator =
                 std::make_unique<RomFSDelayGenerator>();
             return MakeResult<std::unique_ptr<FileBackend>>(std::make_unique<IVFCFile>(
-                ncch_data.update_romfs_file, ncch_data.update_romfs_offset,
-                ncch_data.update_romfs_size, std::move(delay_generator)));
+                ncch_data.update_romfs_file, std::move(delay_generator)));
         } else {
             LOG_INFO(Service_FS, "Unable to read update RomFS");
             return ERROR_ROMFS_NOT_FOUND;
@@ -226,7 +224,7 @@ private:
             return ERROR_EXEFS_SECTION_NOT_FOUND;
         }
 
-        LOG_ERROR(Service_FS, "Unknown ExeFS section %s!", filename.c_str());
+        LOG_ERROR(Service_FS, "Unknown ExeFS section {}!", filename);
         return ERROR_INVALID_PATH;
     }
 
@@ -241,29 +239,25 @@ void ArchiveFactory_SelfNCCH::Register(Loader::AppLoader& app_loader) {
             "Could not read program id when registering with SelfNCCH, this might be a 3dsx file");
     }
 
-    LOG_DEBUG(Service_FS, "Registering program %016" PRIX64 " with the SelfNCCH archive factory",
+    LOG_DEBUG(Service_FS, "Registering program {:016X} with the SelfNCCH archive factory",
               program_id);
 
     if (ncch_data.find(program_id) != ncch_data.end()) {
         LOG_WARNING(Service_FS,
-                    "Registering program %016" PRIX64
-                    " with SelfNCCH will override existing mapping",
+                    "Registering program {:016X} with SelfNCCH will override existing mapping",
                     program_id);
     }
 
     NCCHData& data = ncch_data[program_id];
 
-    std::shared_ptr<FileUtil::IOFile> romfs_file_;
-    if (Loader::ResultStatus::Success ==
-        app_loader.ReadRomFS(romfs_file_, data.romfs_offset, data.romfs_size)) {
+    std::shared_ptr<RomFSReader> romfs_file_;
+    if (Loader::ResultStatus::Success == app_loader.ReadRomFS(romfs_file_)) {
 
         data.romfs_file = std::move(romfs_file_);
     }
 
-    std::shared_ptr<FileUtil::IOFile> update_romfs_file;
-    if (Loader::ResultStatus::Success == app_loader.ReadUpdateRomFS(update_romfs_file,
-                                                                    data.update_romfs_offset,
-                                                                    data.update_romfs_size)) {
+    std::shared_ptr<RomFSReader> update_romfs_file;
+    if (Loader::ResultStatus::Success == app_loader.ReadUpdateRomFS(update_romfs_file)) {
 
         data.update_romfs_file = std::move(update_romfs_file);
     }

@@ -37,7 +37,7 @@ void Module::Interface::ConnectAsync(Kernel::HLERequestContext& ctx) {
     ac->connect_event = rp.PopObject<Kernel::Event>();
 
     if (ac->connect_event) {
-        ac->connect_event->name = "AC:connect_event";
+        ac->connect_event->SetName("AC:connect_event");
         ac->connect_event->Signal();
         ac->ac_connected = true;
     }
@@ -67,7 +67,7 @@ void Module::Interface::CloseAsync(Kernel::HLERequestContext& ctx) {
     }
 
     if (ac->close_event) {
-        ac->close_event->name = "AC:close_event";
+        ac->close_event->SetName("AC:close_event");
         ac->close_event->Signal();
     }
 
@@ -125,7 +125,7 @@ void Module::Interface::SetRequestEulaVersion(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
     rb.PushStaticBuffer(std::move(ac_config), 0);
 
-    LOG_WARNING(Service_AC, "(STUBBED) called, major=%u, minor=%u", major, minor);
+    LOG_WARNING(Service_AC, "(STUBBED) called, major={}, minor={}", major, minor);
 }
 
 void Module::Interface::RegisterDisconnectEvent(Kernel::HLERequestContext& ctx) {
@@ -134,7 +134,7 @@ void Module::Interface::RegisterDisconnectEvent(Kernel::HLERequestContext& ctx) 
 
     ac->disconnect_event = rp.PopObject<Kernel::Event>();
     if (ac->disconnect_event) {
-        ac->disconnect_event->name = "AC:disconnect_event";
+        ac->disconnect_event->SetName("AC:disconnect_event");
     }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
@@ -153,7 +153,7 @@ void Module::Interface::IsConnected(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
     rb.Push(ac->ac_connected);
 
-    LOG_WARNING(Service_AC, "(STUBBED) called unk=%08X descriptor=%08X param=%08X", unk,
+    LOG_WARNING(Service_AC, "(STUBBED) called unk=0x{:08X} descriptor=0x{:08X} param=0x{:08X}", unk,
                 unk_descriptor, unk_param);
 }
 
@@ -163,7 +163,7 @@ void Module::Interface::SetClientVersion(Kernel::HLERequestContext& ctx) {
     u32 version = rp.Pop<u32>();
     rp.Skip(2, false); // ProcessId descriptor
 
-    LOG_WARNING(Service_AC, "(STUBBED) called, version: 0x%08X", version);
+    LOG_WARNING(Service_AC, "(STUBBED) called, version: 0x{:08X}", version);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);

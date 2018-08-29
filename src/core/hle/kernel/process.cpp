@@ -111,9 +111,9 @@ void Process::ParseKernelCaps(const u32* kernel_caps, size_t len) {
 
             int minor = kernel_version & 0xFF;
             int major = (kernel_version >> 8) & 0xFF;
-            LOG_INFO(Loader, "ExHeader kernel version: %d.%d", major, minor);
+            LOG_INFO(Loader, "ExHeader kernel version: {}.{}", major, minor);
         } else {
-            LOG_ERROR(Loader, "Unhandled kernel caps descriptor: 0x%08X", descriptor);
+            LOG_ERROR(Loader, "Unhandled kernel caps descriptor: 0x{:08X}", descriptor);
         }
     }
 }
@@ -133,9 +133,9 @@ void Process::Run(s32 main_thread_priority, u32 stack_size) {
     };
 
     // Map CodeSet segments
-    MapSegment(codeset->code, VMAPermission::ReadExecute, MemoryState::Code);
-    MapSegment(codeset->rodata, VMAPermission::Read, MemoryState::Code);
-    MapSegment(codeset->data, VMAPermission::ReadWrite, MemoryState::Private);
+    MapSegment(codeset->CodeSegment(), VMAPermission::ReadExecute, MemoryState::Code);
+    MapSegment(codeset->RODataSegment(), VMAPermission::Read, MemoryState::Code);
+    MapSegment(codeset->DataSegment(), VMAPermission::ReadWrite, MemoryState::Private);
 
     // Allocate and map stack
     vm_manager

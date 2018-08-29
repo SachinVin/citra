@@ -65,8 +65,20 @@ void MultiplayerState::Close() {
         lobby->close();
 }
 
+void MultiplayerState::retranslateUi() {
+    status_text->setToolTip(tr("Current connection status"));
+
+    if (current_state == Network::RoomMember::State::Uninitialized) {
+        status_text->setText(tr("Not Connected. Click here to find a room!"));
+    } else if (current_state == Network::RoomMember::State::Joined) {
+        status_text->setText(tr("Connected"));
+    } else {
+        status_text->setText(tr("Not Connected"));
+    }
+}
+
 void MultiplayerState::OnNetworkStateChanged(const Network::RoomMember::State& state) {
-    NGLOG_DEBUG(Frontend, "Network State: {}", Network::GetStateStr(state));
+    LOG_DEBUG(Frontend, "Network State: {}", Network::GetStateStr(state));
     bool is_connected = false;
     switch (state) {
     case Network::RoomMember::State::LostConnection:
@@ -106,6 +118,8 @@ void MultiplayerState::OnNetworkStateChanged(const Network::RoomMember::State& s
         leave_room->setEnabled(false);
         show_room->setEnabled(false);
     }
+
+    current_state = state;
 }
 
 void MultiplayerState::OnAnnounceFailed(const Common::WebResult& result) {
@@ -118,6 +132,14 @@ void MultiplayerState::OnAnnounceFailed(const Common::WebResult& result) {
            "Debug Message: ") +
             QString::fromStdString(result.result_string),
         QMessageBox::Ok);
+}
+
+void MultiplayerState::UpdateThemedIcons() {
+    if (current_state == Network::RoomMember::State::Joined) {
+        status_icon->setPixmap(QIcon::fromTheme("connected").pixmap(16));
+    } else {
+        status_icon->setPixmap(QIcon::fromTheme("disconnected").pixmap(16));
+    }
 }
 
 static void BringWidgetToFront(QWidget* widget) {
@@ -147,7 +169,7 @@ bool MultiplayerState::OnCloseRoom() {
         // if you are in a room, leave it
         if (auto member = Network::GetRoomMember().lock()) {
             member->Leave();
-            NGLOG_DEBUG(Frontend, "Left the room (as a client)");
+            LOG_DEBUG(Frontend, "Left the room (as a client)");
         }
 
         // if you are hosting a room, also stop hosting
@@ -156,7 +178,7 @@ bool MultiplayerState::OnCloseRoom() {
         }
         room->Destroy();
         announce_multiplayer_session->Stop();
-        NGLOG_DEBUG(Frontend, "Closed the room (as a server)");
+        LOG_DEBUG(Frontend, "Closed the room (as a server)");
     }
     return true;
 }

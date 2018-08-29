@@ -20,16 +20,21 @@ constexpr TextureUnit PicaTexture(int unit) {
     return TextureUnit{unit};
 }
 
-constexpr TextureUnit LightingLUT{3};
-constexpr TextureUnit FogLUT{4};
-constexpr TextureUnit ProcTexNoiseLUT{5};
-constexpr TextureUnit ProcTexColorMap{6};
-constexpr TextureUnit ProcTexAlphaMap{7};
-constexpr TextureUnit ProcTexLUT{8};
-constexpr TextureUnit ProcTexDiffLUT{9};
-constexpr TextureUnit TextureCube{10};
+constexpr TextureUnit TextureCube{3};
+constexpr TextureUnit TextureBufferLUT_RG{4};
+constexpr TextureUnit TextureBufferLUT_RGBA{5};
 
 } // namespace TextureUnits
+
+namespace ImageUnits {
+constexpr GLuint ShadowBuffer = 0;
+constexpr GLuint ShadowTexturePX = 1;
+constexpr GLuint ShadowTextureNX = 2;
+constexpr GLuint ShadowTexturePY = 3;
+constexpr GLuint ShadowTextureNY = 4;
+constexpr GLuint ShadowTexturePZ = 5;
+constexpr GLuint ShadowTextureNZ = 6;
+} // namespace ImageUnits
 
 class OpenGLState {
 public:
@@ -95,31 +100,20 @@ public:
 
     struct {
         GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
-    } lighting_lut;
+    } texture_buffer_lut_rg;
 
     struct {
         GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
-    } fog_lut;
+    } texture_buffer_lut_rgba;
 
-    struct {
-        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
-    } proctex_noise_lut;
-
-    struct {
-        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
-    } proctex_color_map;
-
-    struct {
-        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
-    } proctex_alpha_map;
-
-    struct {
-        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
-    } proctex_lut;
-
-    struct {
-        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
-    } proctex_diff_lut;
+    // GL_IMAGE_BINDING_NAME
+    GLuint image_shadow_buffer;
+    GLuint image_shadow_texture_px;
+    GLuint image_shadow_texture_nx;
+    GLuint image_shadow_texture_py;
+    GLuint image_shadow_texture_ny;
+    GLuint image_shadow_texture_pz;
+    GLuint image_shadow_texture_nz;
 
     struct {
         GLuint read_framebuffer; // GL_READ_FRAMEBUFFER_BINDING

@@ -113,6 +113,11 @@ inline void RequestBuilder::Push(u32 value) {
     cmdbuf[index++] = value;
 }
 
+template <>
+inline void RequestBuilder::Push(s32 value) {
+    cmdbuf[index++] = static_cast<u32>(value);
+}
+
 template <typename T>
 void RequestBuilder::PushRaw(const T& value) {
     static_assert(std::is_trivially_copyable<T>(), "Raw types should be trivially copyable");
@@ -331,6 +336,12 @@ inline u64 RequestParser::Pop() {
 }
 
 template <>
+inline s32 RequestParser::Pop() {
+    s32_le data = PopRaw<s32_le>();
+    return data;
+}
+
+template <>
 inline bool RequestParser::Pop() {
     return Pop<u8>() != 0;
 }
@@ -412,7 +423,7 @@ inline const std::vector<u8>& RequestParser::PopStaticBuffer() {
     Pop<VAddr>();
 
     StaticBufferDescInfo buffer_info{sbuffer_descriptor};
-    return context->GetStaticBuffer(buffer_info.buffer_id);
+    return context->GetStaticBuffer(static_cast<u8>(buffer_info.buffer_id));
 }
 
 inline Kernel::MappedBuffer& RequestParser::PopMappedBuffer() {

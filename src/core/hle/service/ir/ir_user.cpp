@@ -183,8 +183,7 @@ private:
 
 /// Wraps the payload into packet and puts it to the receive buffer
 void IR_USER::PutToReceive(const std::vector<u8>& payload) {
-    LOG_TRACE(Service_IR, "called, data=%s",
-              Common::ArrayToString(payload.data(), payload.size()).c_str());
+    LOG_TRACE(Service_IR, "called, data={}", Common::ArrayToString(payload.data(), payload.size()));
     size_t size = payload.size();
 
     std::vector<u8> packet;
@@ -252,9 +251,9 @@ void IR_USER::InitializeIrNopShared(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
 
     LOG_INFO(Service_IR,
-             "called, shared_buff_size=%u, recv_buff_size=%u, "
-             "recv_buff_packet_count=%u, send_buff_size=%u, "
-             "send_buff_packet_count=%u, baud_rate=%u",
+             "called, shared_buff_size={}, recv_buff_size={}, "
+             "recv_buff_packet_count={}, send_buff_size={}, "
+             "send_buff_packet_count={}, baud_rate={}",
              shared_buff_size, recv_buff_size, recv_buff_packet_count, send_buff_size,
              send_buff_packet_count, baud_rate);
 }
@@ -275,7 +274,7 @@ void IR_USER::RequireConnection(Kernel::HLERequestContext& ctx) {
         connected_device->OnConnect();
         conn_status_event->Signal();
     } else {
-        LOG_WARNING(Service_IR, "unknown device id %u. Won't connect.", device_id);
+        LOG_WARNING(Service_IR, "unknown device id {}. Won't connect.", device_id);
         shared_memory_ptr[offsetof(SharedMemoryHeader, connection_status)] = 1;
         shared_memory_ptr[offsetof(SharedMemoryHeader, trying_to_connect_status)] = 2;
     }
@@ -283,7 +282,7 @@ void IR_USER::RequireConnection(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
 
-    LOG_INFO(Service_IR, "called, device_id = %u", device_id);
+    LOG_INFO(Service_IR, "called, device_id = {}", device_id);
 }
 
 void IR_USER::GetReceiveEvent(Kernel::HLERequestContext& ctx) {
@@ -362,7 +361,7 @@ void IR_USER::SendIrNop(Kernel::HLERequestContext& ctx) {
                            ErrorSummary::InvalidState, ErrorLevel::Status));
     }
 
-    LOG_TRACE(Service_IR, "called, data=%s", Common::ArrayToString(buffer.data(), size).c_str());
+    LOG_TRACE(Service_IR, "called, data={}", Common::ArrayToString(buffer.data(), size));
 }
 
 void IR_USER::ReleaseReceivedData(Kernel::HLERequestContext& ctx) {
@@ -374,12 +373,12 @@ void IR_USER::ReleaseReceivedData(Kernel::HLERequestContext& ctx) {
     if (receive_buffer->Release(count)) {
         rb.Push(RESULT_SUCCESS);
     } else {
-        LOG_ERROR(Service_IR, "failed to release %u packets", count);
+        LOG_ERROR(Service_IR, "failed to release {} packets", count);
         rb.Push(ResultCode(ErrorDescription::NoData, ErrorModule::IR, ErrorSummary::NotFound,
                            ErrorLevel::Status));
     }
 
-    LOG_TRACE(Service_IR, "called, count=%u", count);
+    LOG_TRACE(Service_IR, "called, count={}", count);
 }
 
 IR_USER::IR_USER() : ServiceFramework("ir:USER", 1) {

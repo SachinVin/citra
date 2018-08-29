@@ -64,10 +64,16 @@ add_library(core STATIC
     file_sys/ncch_container.h
     file_sys/path_parser.cpp
     file_sys/path_parser.h
+    file_sys/romfs_reader.cpp
+    file_sys/romfs_reader.h
     file_sys/savedata_archive.cpp
     file_sys/savedata_archive.h
     file_sys/title_metadata.cpp
     file_sys/title_metadata.h
+    frontend/applets/default_applets.cpp
+    frontend/applets/default_applets.h
+    frontend/applets/swkbd.cpp
+    frontend/applets/swkbd.h
     frontend/camera/blank_camera.cpp
     frontend/camera/blank_camera.h
     frontend/camera/factory.cpp
@@ -117,6 +123,8 @@ add_library(core STATIC
     hle/kernel/memory.h
     hle/kernel/mutex.cpp
     hle/kernel/mutex.h
+    hle/kernel/object.cpp
+    hle/kernel/object.h
     hle/kernel/process.cpp
     hle/kernel/process.h
     hle/kernel/resource_limit.cpp
@@ -214,8 +222,8 @@ add_library(core STATIC
     hle/service/cfg/cfg_s.h
     hle/service/cfg/cfg_u.cpp
     hle/service/cfg/cfg_u.h
-    hle/service/csnd_snd.cpp
-    hle/service/csnd_snd.h
+    hle/service/csnd/csnd_snd.cpp
+    hle/service/csnd/csnd_snd.h
     hle/service/dlp/dlp.cpp
     hle/service/dlp/dlp.h
     hle/service/dlp/dlp_clnt.cpp
@@ -224,8 +232,8 @@ add_library(core STATIC
     hle/service/dlp/dlp_fkcl.h
     hle/service/dlp/dlp_srvr.cpp
     hle/service/dlp/dlp_srvr.h
-    hle/service/dsp_dsp.cpp
-    hle/service/dsp_dsp.h
+    hle/service/dsp/dsp_dsp.cpp
+    hle/service/dsp/dsp_dsp.h
     hle/service/err_f.cpp
     hle/service/err_f.h
     hle/service/frd/frd.cpp
@@ -242,8 +250,8 @@ add_library(core STATIC
     hle/service/gsp/gsp.h
     hle/service/gsp/gsp_gpu.cpp
     hle/service/gsp/gsp_gpu.h
-    hle/service/gsp_lcd.cpp
-    hle/service/gsp_lcd.h
+    hle/service/gsp/gsp_lcd.cpp
+    hle/service/gsp/gsp_lcd.h
     hle/service/hid/hid.cpp
     hle/service/hid/hid.h
     hle/service/hid/hid_spvr.cpp
@@ -322,8 +330,14 @@ add_library(core STATIC
     hle/service/nwm/uds_connection.h
     hle/service/nwm/uds_data.cpp
     hle/service/nwm/uds_data.h
-    hle/service/pm_app.cpp
-    hle/service/pm_app.h
+    hle/service/pm/pm.cpp
+    hle/service/pm/pm.h
+    hle/service/pm/pm_app.cpp
+    hle/service/pm/pm_app.h
+    hle/service/pm/pm_dbg.cpp
+    hle/service/pm/pm_dbg.h
+    hle/service/ps/ps_ps.cpp
+    hle/service/ps/ps_ps.h
     hle/service/ptm/ptm.cpp
     hle/service/ptm/ptm.h
     hle/service/ptm/ptm_gets.cpp
@@ -342,6 +356,8 @@ add_library(core STATIC
     hle/service/pxi/pxi.h
     hle/service/qtm/qtm.cpp
     hle/service/qtm/qtm.h
+    hle/service/qtm/qtm_c.cpp
+    hle/service/qtm/qtm_c.h
     hle/service/qtm/qtm_s.cpp
     hle/service/qtm/qtm_s.h
     hle/service/qtm/qtm_sp.cpp
@@ -406,7 +422,7 @@ add_library(core STATIC
 create_target_directory_groups(core)
 
 target_link_libraries(core PUBLIC common PRIVATE audio_core network video_core)
-target_link_libraries(core PUBLIC Boost::boost PRIVATE cryptopp fmt)
+target_link_libraries(core PUBLIC Boost::boost PRIVATE cryptopp fmt open_source_archives)
 if (ENABLE_WEB_SERVICE)
     target_link_libraries(core PUBLIC json-headers web_service)
 endif()

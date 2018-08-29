@@ -56,15 +56,16 @@ OpenGLState::OpenGLState() {
     texture_cube_unit.texture_cube = 0;
     texture_cube_unit.sampler = 0;
 
-    lighting_lut.texture_buffer = 0;
+    texture_buffer_lut_rg.texture_buffer = 0;
+    texture_buffer_lut_rgba.texture_buffer = 0;
 
-    fog_lut.texture_buffer = 0;
-
-    proctex_lut.texture_buffer = 0;
-    proctex_diff_lut.texture_buffer = 0;
-    proctex_color_map.texture_buffer = 0;
-    proctex_alpha_map.texture_buffer = 0;
-    proctex_noise_lut.texture_buffer = 0;
+    image_shadow_buffer = 0;
+    image_shadow_texture_px = 0;
+    image_shadow_texture_nx = 0;
+    image_shadow_texture_py = 0;
+    image_shadow_texture_ny = 0;
+    image_shadow_texture_pz = 0;
+    image_shadow_texture_nz = 0;
 
     draw.read_framebuffer = 0;
     draw.draw_framebuffer = 0;
@@ -220,46 +221,53 @@ void OpenGLState::Apply() const {
         glBindSampler(TextureUnits::TextureCube.id, texture_cube_unit.sampler);
     }
 
-    // Lighting LUTs
-    if (lighting_lut.texture_buffer != cur_state.lighting_lut.texture_buffer) {
-        glActiveTexture(TextureUnits::LightingLUT.Enum());
-        glBindTexture(GL_TEXTURE_BUFFER, lighting_lut.texture_buffer);
+    // Texture buffer LUTs
+    if (texture_buffer_lut_rg.texture_buffer != cur_state.texture_buffer_lut_rg.texture_buffer) {
+        glActiveTexture(TextureUnits::TextureBufferLUT_RG.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, texture_buffer_lut_rg.texture_buffer);
     }
 
-    // Fog LUT
-    if (fog_lut.texture_buffer != cur_state.fog_lut.texture_buffer) {
-        glActiveTexture(TextureUnits::FogLUT.Enum());
-        glBindTexture(GL_TEXTURE_BUFFER, fog_lut.texture_buffer);
+    // Texture buffer LUTs
+    if (texture_buffer_lut_rgba.texture_buffer !=
+        cur_state.texture_buffer_lut_rgba.texture_buffer) {
+        glActiveTexture(TextureUnits::TextureBufferLUT_RGBA.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, texture_buffer_lut_rgba.texture_buffer);
     }
 
-    // ProcTex Noise LUT
-    if (proctex_noise_lut.texture_buffer != cur_state.proctex_noise_lut.texture_buffer) {
-        glActiveTexture(TextureUnits::ProcTexNoiseLUT.Enum());
-        glBindTexture(GL_TEXTURE_BUFFER, proctex_noise_lut.texture_buffer);
+    // Shadow Images
+    if (image_shadow_buffer != cur_state.image_shadow_buffer) {
+        glBindImageTexture(ImageUnits::ShadowBuffer, image_shadow_buffer, 0, GL_FALSE, 0,
+                           GL_READ_WRITE, GL_R32UI);
     }
 
-    // ProcTex Color Map
-    if (proctex_color_map.texture_buffer != cur_state.proctex_color_map.texture_buffer) {
-        glActiveTexture(TextureUnits::ProcTexColorMap.Enum());
-        glBindTexture(GL_TEXTURE_BUFFER, proctex_color_map.texture_buffer);
+    if (image_shadow_texture_px != cur_state.image_shadow_texture_px) {
+        glBindImageTexture(ImageUnits::ShadowTexturePX, image_shadow_texture_px, 0, GL_FALSE, 0,
+                           GL_READ_ONLY, GL_R32UI);
     }
 
-    // ProcTex Alpha Map
-    if (proctex_alpha_map.texture_buffer != cur_state.proctex_alpha_map.texture_buffer) {
-        glActiveTexture(TextureUnits::ProcTexAlphaMap.Enum());
-        glBindTexture(GL_TEXTURE_BUFFER, proctex_alpha_map.texture_buffer);
+    if (image_shadow_texture_nx != cur_state.image_shadow_texture_nx) {
+        glBindImageTexture(ImageUnits::ShadowTextureNX, image_shadow_texture_nx, 0, GL_FALSE, 0,
+                           GL_READ_ONLY, GL_R32UI);
     }
 
-    // ProcTex LUT
-    if (proctex_lut.texture_buffer != cur_state.proctex_lut.texture_buffer) {
-        glActiveTexture(TextureUnits::ProcTexLUT.Enum());
-        glBindTexture(GL_TEXTURE_BUFFER, proctex_lut.texture_buffer);
+    if (image_shadow_texture_py != cur_state.image_shadow_texture_py) {
+        glBindImageTexture(ImageUnits::ShadowTexturePY, image_shadow_texture_py, 0, GL_FALSE, 0,
+                           GL_READ_ONLY, GL_R32UI);
     }
 
-    // ProcTex Diff LUT
-    if (proctex_diff_lut.texture_buffer != cur_state.proctex_diff_lut.texture_buffer) {
-        glActiveTexture(TextureUnits::ProcTexDiffLUT.Enum());
-        glBindTexture(GL_TEXTURE_BUFFER, proctex_diff_lut.texture_buffer);
+    if (image_shadow_texture_ny != cur_state.image_shadow_texture_ny) {
+        glBindImageTexture(ImageUnits::ShadowTextureNY, image_shadow_texture_ny, 0, GL_FALSE, 0,
+                           GL_READ_ONLY, GL_R32UI);
+    }
+
+    if (image_shadow_texture_pz != cur_state.image_shadow_texture_pz) {
+        glBindImageTexture(ImageUnits::ShadowTexturePZ, image_shadow_texture_pz, 0, GL_FALSE, 0,
+                           GL_READ_ONLY, GL_R32UI);
+    }
+
+    if (image_shadow_texture_nz != cur_state.image_shadow_texture_nz) {
+        glBindImageTexture(ImageUnits::ShadowTextureNZ, image_shadow_texture_nz, 0, GL_FALSE, 0,
+                           GL_READ_ONLY, GL_R32UI);
     }
 
     // Framebuffer
@@ -337,20 +345,24 @@ OpenGLState& OpenGLState::ResetTexture(GLuint handle) {
     }
     if (texture_cube_unit.texture_cube == handle)
         texture_cube_unit.texture_cube = 0;
-    if (lighting_lut.texture_buffer == handle)
-        lighting_lut.texture_buffer = 0;
-    if (fog_lut.texture_buffer == handle)
-        fog_lut.texture_buffer = 0;
-    if (proctex_noise_lut.texture_buffer == handle)
-        proctex_noise_lut.texture_buffer = 0;
-    if (proctex_color_map.texture_buffer == handle)
-        proctex_color_map.texture_buffer = 0;
-    if (proctex_alpha_map.texture_buffer == handle)
-        proctex_alpha_map.texture_buffer = 0;
-    if (proctex_lut.texture_buffer == handle)
-        proctex_lut.texture_buffer = 0;
-    if (proctex_diff_lut.texture_buffer == handle)
-        proctex_diff_lut.texture_buffer = 0;
+    if (texture_buffer_lut_rg.texture_buffer == handle)
+        texture_buffer_lut_rg.texture_buffer = 0;
+    if (texture_buffer_lut_rgba.texture_buffer == handle)
+        texture_buffer_lut_rgba.texture_buffer = 0;
+    if (image_shadow_buffer == handle)
+        image_shadow_buffer = 0;
+    if (image_shadow_texture_px == handle)
+        image_shadow_texture_px = 0;
+    if (image_shadow_texture_nx == handle)
+        image_shadow_texture_nx = 0;
+    if (image_shadow_texture_py == handle)
+        image_shadow_texture_py = 0;
+    if (image_shadow_texture_ny == handle)
+        image_shadow_texture_ny = 0;
+    if (image_shadow_texture_pz == handle)
+        image_shadow_texture_pz = 0;
+    if (image_shadow_texture_nz == handle)
+        image_shadow_texture_nz = 0;
     return *this;
 }
 

@@ -77,7 +77,7 @@ static float GetShiftOffset(float v, ProcTexShift mode, ProcTexClamp clamp_mode)
     case ProcTexShift::Even:
         return offset * ((((int)v + 1) / 2) % 2);
     default:
-        LOG_CRITICAL(HW_GPU, "Unknown shift mode %u", static_cast<u32>(mode));
+        LOG_CRITICAL(HW_GPU, "Unknown shift mode {}", static_cast<u32>(mode));
         return 0;
     }
 };
@@ -107,7 +107,7 @@ static void ClampCoord(float& coord, ProcTexClamp mode) {
             coord = 1.0f;
         break;
     default:
-        LOG_CRITICAL(HW_GPU, "Unknown clamp mode %u", static_cast<u32>(mode));
+        LOG_CRITICAL(HW_GPU, "Unknown clamp mode {}", static_cast<u32>(mode));
         coord = std::min(coord, 1.0f);
         break;
     }
@@ -148,7 +148,7 @@ float CombineAndMap(float u, float v, ProcTexCombiner combiner,
         f = std::min(((u + v) * 0.5f + std::sqrt(u * u + v * v)) * 0.5f, 1.0f);
         break;
     default:
-        LOG_CRITICAL(HW_GPU, "Unknown combiner %u", static_cast<u32>(combiner));
+        LOG_CRITICAL(HW_GPU, "Unknown combiner {}", static_cast<u32>(combiner));
         f = 0.0f;
         break;
     }
@@ -185,7 +185,7 @@ Math::Vec4<u8> ProcTex(float u, float v, TexturingRegs regs, State::ProcTex stat
 
     // Look up the color
     // For the color lut, coord=0.0 is lut[offset] and coord=1.0 is lut[offset+width-1]
-    const u32 offset = regs.proctex_lut_offset;
+    const u32 offset = regs.proctex_lut_offset.level0;
     const u32 width = regs.proctex_lut.width;
     const float index = offset + (lut_coord * (width - 1));
     Math::Vec4<u8> final_color;

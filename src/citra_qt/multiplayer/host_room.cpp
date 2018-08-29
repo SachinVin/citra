@@ -25,7 +25,7 @@
 HostRoomWindow::HostRoomWindow(QWidget* parent, QStandardItemModel* list,
                                std::shared_ptr<Core::AnnounceMultiplayerSession> session)
     : QDialog(parent, Qt::WindowTitleHint | Qt::WindowCloseButtonHint | Qt::WindowSystemMenuHint),
-      ui(std::make_unique<Ui::HostRoom>()), announce_multiplayer_session(session), game_list(list) {
+      ui(std::make_unique<Ui::HostRoom>()), announce_multiplayer_session(session) {
     ui->setupUi(this);
 
     // set up validation for all of the fields
@@ -35,6 +35,15 @@ HostRoomWindow::HostRoomWindow(QWidget* parent, QStandardItemModel* list,
     ui->port->setPlaceholderText(QString::number(Network::DefaultRoomPort));
 
     // Create a proxy to the game list to display the list of preferred games
+    game_list = new QStandardItemModel;
+
+    for (int i = 0; i < list->rowCount(); i++) {
+        auto parent = list->item(i, 0);
+        for (int j = 0; j < parent->rowCount(); j++) {
+            game_list->appendRow(parent->child(j)->clone());
+        }
+    }
+
     proxy = new ComboBoxProxyModel;
     proxy->setSourceModel(game_list);
     proxy->sort(0, Qt::AscendingOrder);
@@ -45,6 +54,10 @@ HostRoomWindow::HostRoomWindow(QWidget* parent, QStandardItemModel* list,
 
     // Restore the settings:
     ui->username->setText(UISettings::values.room_nickname);
+    if (ui->username->text().isEmpty() && !Settings::values.citra_username.empty()) {
+        // Use Citra Web Service user name as nickname by default
+        ui->username->setText(QString::fromStdString(Settings::values.citra_username));
+    }
     ui->room_name->setText(UISettings::values.room_name);
     ui->port->setText(UISettings::values.room_port);
     ui->max_player->setValue(UISettings::values.max_player);
@@ -94,7 +107,7 @@ void HostRoomWindow::Host() {
                                         ui->max_player->value(), game_name.toStdString(), game_id);
             if (!created) {
                 NetworkMessage::ShowError(NetworkMessage::COULD_NOT_CREATE_ROOM);
-                NGLOG_ERROR(Network, "Could not create room!");
+                LOG_ERROR(Network, "Could not create room!");
                 ui->host->setEnabled(true);
                 return;
             }
@@ -127,7 +140,7 @@ void HostRoomWindow::OnConnection() {
                 if (auto session = announce_multiplayer_session.lock()) {
                     session->Start();
                 } else {
-                    NGLOG_ERROR(Network, "Starting announce session failed");
+                    LOG_ERROR(Network, "Starting announce session failed");
                 }
             }
             close();
@@ -152,8 +165,7 @@ QVariant ComboBoxProxyModel::data(const QModelIndex& idx, int role) const {
 }
 
 bool ComboBoxProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
-    // TODO(jroweboy): Sort by game title not filename
-    auto leftData = left.data(Qt::DisplayRole).toString();
-    auto rightData = right.data(Qt::DisplayRole).toString();
+    auto leftData = left.data(GameListItemPath::TitleRole).toString();
+    auto rightData = right.data(GameListItemPath::TitleRole).toString();
     return leftData.compare(rightData) < 0;
 }

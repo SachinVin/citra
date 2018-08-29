@@ -10,6 +10,7 @@
 #include "core/hle/kernel/errors.h"
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/mutex.h"
+#include "core/hle/kernel/object.h"
 #include "core/hle/kernel/thread.h"
 
 namespace Kernel {
@@ -65,7 +66,7 @@ ResultCode Mutex::Release(Thread* thread) {
         if (holding_thread) {
             LOG_ERROR(
                 Kernel,
-                "Tried to release a mutex (owned by thread id %u) from a different thread id %u",
+                "Tried to release a mutex (owned by thread id {}) from a different thread id {}",
                 holding_thread->thread_id, thread->thread_id);
         }
         return ResultCode(ErrCodes::WrongLockingThread, ErrorModule::Kernel,

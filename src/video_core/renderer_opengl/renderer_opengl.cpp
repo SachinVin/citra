@@ -135,7 +135,7 @@ static std::array<GLfloat, 3 * 2> MakeOrthographicMatrix(const float width, cons
     return matrix;
 }
 
-RendererOpenGL::RendererOpenGL() = default;
+RendererOpenGL::RendererOpenGL(EmuWindow& window) : RendererBase{window} {}
 RendererOpenGL::~RendererOpenGL() = default;
 
 /// Swap buffers (render frame)
@@ -144,12 +144,13 @@ void RendererOpenGL::SwapBuffers() {
     OpenGLState prev_state = OpenGLState::GetCurState();
     state.Apply();
 
-    for (int i : {0, 1}) {
-        const auto& framebuffer = GPU::g_regs.framebuffer_config[i];
+    for (int i : {0, 1, 2}) {
+        int fb_id = i == 2 ? 1 : 0;
+        const auto& framebuffer = GPU::g_regs.framebuffer_config[fb_id];
 
         // Main LCD (0): 0x1ED02204, Sub LCD (1): 0x1ED02A04
         u32 lcd_color_addr =
-            (i == 0) ? LCD_REG_INDEX(color_fill_top) : LCD_REG_INDEX(color_fill_bottom);
+            (fb_id == 0) ? LCD_REG_INDEX(color_fill_top) : LCD_REG_INDEX(color_fill_bottom);
         lcd_color_addr = HW::VADDR_LCD + 4 * lcd_color_addr;
         LCD::Regs::ColorFill color_fill = {0};
         LCD::Read(color_fill.raw, lcd_color_addr);
@@ -170,7 +171,7 @@ void RendererOpenGL::SwapBuffers() {
                 // performance problem.
                 ConfigureFramebufferTexture(screen_infos[i].texture, framebuffer);
             }
-            LoadFBToScreenInfo(framebuffer, screen_infos[i]);
+            LoadFBToScreenInfo(framebuffer, screen_infos[i], i == 1);
 
             // Resize the texture in case the framebuffer size has changed
             screen_infos[i].texture.width = framebuffer.width;
@@ -183,8 +184,8 @@ void RendererOpenGL::SwapBuffers() {
     Core::System::GetInstance().perf_stats.EndSystemFrame();
 
     // Swap buffers
-    render_window->PollEvents();
-    render_window->SwapBuffers();
+    render_window.PollEvents();
+    render_window.SwapBuffers();
 
     Core::System::GetInstance().frame_limiter.DoFrameLimiting(CoreTiming::GetGlobalTimeUs());
     Core::System::GetInstance().perf_stats.BeginSystemFrame();
@@ -201,12 +202,17 @@ void RendererOpenGL::SwapBuffers() {
  * Loads framebuffer from emulated memory into the active OpenGL texture.
  */
 void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
-                                        ScreenInfo& screen_info) {
+                                        ScreenInfo& screen_info, bool right_eye) {
+
+    if (framebuffer.address_right1 == 0 || framebuffer.address_right2 == 0)
+        right_eye = false;
 
     const PAddr framebuffer_addr =
-        framebuffer.active_fb == 0 ? framebuffer.address_left1 : framebuffer.address_left2;
+        framebuffer.active_fb == 0
+            ? (!right_eye ? framebuffer.address_left1 : framebuffer.address_right1)
+            : (!right_eye ? framebuffer.address_left2 : framebuffer.address_right2);
 
-    LOG_TRACE(Render_OpenGL, "0x%08x bytes from 0x%08x(%dx%d), fmt %x",
+    LOG_TRACE(Render_OpenGL, "0x{:08x} bytes from 0x{:08x}({}x{}), fmt {:x}",
               framebuffer.stride * framebuffer.height, framebuffer_addr, (int)framebuffer.width,
               (int)framebuffer.height, (int)framebuffer.format);
 
@@ -433,7 +439,13 @@ void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, floa
  * Draws the emulated screens to the emulator window.
  */
 void RendererOpenGL::DrawScreens() {
-    auto layout = render_window->GetFramebufferLayout();
+    if (VideoCore::g_renderer_bg_color_update_requested.exchange(false)) {
+        // Update background color before drawing
+        glClearColor(Settings::values.bg_red, Settings::values.bg_green, Settings::values.bg_blue,
+                     0.0f);
+    }
+
+    auto layout = render_window.GetFramebufferLayout();
     const auto& top_screen = layout.top_screen;
     const auto& bottom_screen = layout.bottom_screen;
 
@@ -450,13 +462,33 @@ void RendererOpenGL::DrawScreens() {
     glUniform1i(uniform_color_texture, 0);
 
     if (layout.top_screen_enabled) {
-        DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left, (float)top_screen.top,
-                                (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
+        if (!Settings::values.toggle_3d) {
+            DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left, (float)top_screen.top,
+                                    (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
+        } else {
+            DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left / 2,
+                                    (float)top_screen.top, (float)top_screen.GetWidth() / 2,
+                                    (float)top_screen.GetHeight());
+            DrawSingleScreenRotated(screen_infos[1],
+                                    ((float)top_screen.left / 2) + ((float)layout.width / 2),
+                                    (float)top_screen.top, (float)top_screen.GetWidth() / 2,
+                                    (float)top_screen.GetHeight());
+        }
     }
     if (layout.bottom_screen_enabled) {
-        DrawSingleScreenRotated(screen_infos[1], (float)bottom_screen.left,
-                                (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
-                                (float)bottom_screen.GetHeight());
+        if (!Settings::values.toggle_3d) {
+            DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left,
+                                    (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
+                                    (float)bottom_screen.GetHeight());
+        } else {
+            DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left / 2,
+                                    (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
+                                    (float)bottom_screen.GetHeight());
+            DrawSingleScreenRotated(screen_infos[2],
+                                    ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
+                                    (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
+                                    (float)bottom_screen.GetHeight());
+        }
     }
 
     m_current_frame++;
@@ -464,14 +496,6 @@ void RendererOpenGL::DrawScreens() {
 
 /// Updates the framerate
 void RendererOpenGL::UpdateFramerate() {}
-
-/**
- * Set the emulator window to use for renderer
- * @param window EmuWindow handle to emulator window to use for rendering
- */
-void RendererOpenGL::SetWindow(EmuWindow* window) {
-    render_window = window;
-}
 
 static const char* GetSource(GLenum source) {
 #define RET(s)                                                                                     \
@@ -523,13 +547,13 @@ static void APIENTRY DebugHandler(GLenum source, GLenum type, GLuint id, GLenum 
         level = Log::Level::Debug;
         break;
     }
-    LOG_GENERIC(Log::Class::Render_OpenGL, level, "%s %s %d: %s", GetSource(source), GetType(type),
+    LOG_GENERIC(Log::Class::Render_OpenGL, level, "{} {} {}: {}", GetSource(source), GetType(type),
                 id, message);
 }
 
 /// Initialize the renderer
-bool RendererOpenGL::Init() {
-    render_window->MakeCurrent();
+Core::System::ResultStatus RendererOpenGL::Init() {
+    render_window.MakeCurrent();
 
     if (GLAD_GL_KHR_debug) {
         glEnable(GL_DEBUG_OUTPUT);
@@ -541,22 +565,26 @@ bool RendererOpenGL::Init() {
     const char* gpu_vendor{reinterpret_cast<char const*>(glGetString(GL_VENDOR))};
     const char* gpu_model{reinterpret_cast<char const*>(glGetString(GL_RENDERER))};
 
-    LOG_INFO(Render_OpenGL, "GL_VERSION: %s", gl_version);
-    LOG_INFO(Render_OpenGL, "GL_VENDOR: %s", gpu_vendor);
-    LOG_INFO(Render_OpenGL, "GL_RENDERER: %s", gpu_model);
+    LOG_INFO(Render_OpenGL, "GL_VERSION: {}", gl_version);
+    LOG_INFO(Render_OpenGL, "GL_VENDOR: {}", gpu_vendor);
+    LOG_INFO(Render_OpenGL, "GL_RENDERER: {}", gpu_model);
 
     Core::Telemetry().AddField(Telemetry::FieldType::UserSystem, "GPU_Vendor", gpu_vendor);
     Core::Telemetry().AddField(Telemetry::FieldType::UserSystem, "GPU_Model", gpu_model);
     Core::Telemetry().AddField(Telemetry::FieldType::UserSystem, "GPU_OpenGL_Version", gl_version);
 
+    if (gpu_vendor == "GDI Generic") {
+        return Core::System::ResultStatus::ErrorVideoCore_ErrorGenericDrivers;
+    }
+
     if (!(GLAD_GL_VERSION_3_3 || GLAD_GL_ES_VERSION_3_0)) {
-        return false;
+        return Core::System::ResultStatus::ErrorVideoCore_ErrorBelowGL33;
     }
 
     InitOpenGLObjects();
     RefreshRasterizerSetting();
 
-    return true;
+    return Core::System::ResultStatus::Success;
 }
 
 /// Shutdown the renderer

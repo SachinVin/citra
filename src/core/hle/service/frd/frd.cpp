@@ -46,7 +46,7 @@ void Module::Interface::GetFriendKeyList(Kernel::HLERequestContext& ctx) {
     rb.Push<u32>(0); // 0 friends
     rb.PushStaticBuffer(buffer, 0);
 
-    LOG_WARNING(Service_FRD, "(STUBBED) called, unknown=%u, frd_count=%u", unknown, frd_count);
+    LOG_WARNING(Service_FRD, "(STUBBED) called, unknown={}, frd_count={}", unknown, frd_count);
 }
 
 void Module::Interface::GetFriendProfile(Kernel::HLERequestContext& ctx) {
@@ -61,7 +61,7 @@ void Module::Interface::GetFriendProfile(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
     rb.PushStaticBuffer(buffer, 0);
 
-    LOG_WARNING(Service_FRD, "(STUBBED) called, count=%u", count);
+    LOG_WARNING(Service_FRD, "(STUBBED) called, count={}", count);
 }
 
 void Module::Interface::GetFriendAttributeFlags(Kernel::HLERequestContext& ctx) {
@@ -76,7 +76,7 @@ void Module::Interface::GetFriendAttributeFlags(Kernel::HLERequestContext& ctx) 
     rb.Push(RESULT_SUCCESS);
     rb.PushStaticBuffer(buffer, 0);
 
-    LOG_WARNING(Service_FRD, "(STUBBED) called, count=%u", count);
+    LOG_WARNING(Service_FRD, "(STUBBED) called, count={}", count);
 }
 
 void Module::Interface::GetMyFriendKey(Kernel::HLERequestContext& ctx) {
@@ -144,7 +144,7 @@ void Module::Interface::SetClientSdkVersion(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
 
-    LOG_WARNING(Service_FRD, "(STUBBED) called, version: 0x%08X", version);
+    LOG_WARNING(Service_FRD, "(STUBBED) called, version: 0x{:08X}", version);
 }
 
 Module::Module() = default;

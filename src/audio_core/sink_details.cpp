@@ -21,12 +21,13 @@ namespace AudioCore {
 // g_sink_details is ordered in terms of desirability, with the best choice at the top.
 const std::vector<SinkDetails> g_sink_details = {
 #ifdef HAVE_CUBEB
-    {"cubeb", []() { return std::make_unique<CubebSink>(); }},
+    SinkDetails{"cubeb", &std::make_unique<CubebSink, std::string>, &ListCubebSinkDevices},
 #endif
 #ifdef HAVE_SDL2
-    {"sdl2", []() { return std::make_unique<SDL2Sink>(); }},
+    SinkDetails{"sdl2", &std::make_unique<SDL2Sink, std::string>, &ListSDL2SinkDevices},
 #endif
-    {"null", []() { return std::make_unique<NullSink>(); }},
+    SinkDetails{"null", &std::make_unique<NullSink, std::string>,
+                [] { return std::vector<std::string>{"null"}; }},
 };
 
 const SinkDetails& GetSinkDetails(std::string sink_id) {
@@ -36,7 +37,7 @@ const SinkDetails& GetSinkDetails(std::string sink_id) {
 
     if (sink_id == "auto" || iter == g_sink_details.end()) {
         if (sink_id != "auto") {
-            NGLOG_ERROR(Audio, "AudioCore::SelectSink given invalid sink_id {}", sink_id);
+            LOG_ERROR(Audio, "AudioCore::SelectSink given invalid sink_id {}", sink_id);
         }
         // Auto-select.
         // g_sink_details is ordered in terms of desirability, with the best choice at the front.

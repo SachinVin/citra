@@ -3,12 +3,10 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
-
 #include "common/assert.h"
 #include "common/color.h"
 #include "common/common_types.h"
 #include "common/logging/log.h"
-#include "common/math_util.h"
 #include "common/vector_math.h"
 #include "core/hw/gpu.h"
 #include "core/memory.h"
@@ -57,7 +55,7 @@ void DrawPixel(int x, int y, const Math::Vec4<u8>& color) {
         break;
 
     default:
-        LOG_CRITICAL(Render_Software, "Unknown framebuffer color format %x",
+        LOG_CRITICAL(Render_Software, "Unknown framebuffer color format {:x}",
                      static_cast<u32>(framebuffer.color_format.Value()));
         UNIMPLEMENTED();
     }
@@ -93,7 +91,7 @@ const Math::Vec4<u8> GetPixel(int x, int y) {
         return Color::DecodeRGBA4(src_pixel);
 
     default:
-        LOG_CRITICAL(Render_Software, "Unknown framebuffer color format %x",
+        LOG_CRITICAL(Render_Software, "Unknown framebuffer color format {:x}",
                      static_cast<u32>(framebuffer.color_format.Value()));
         UNIMPLEMENTED();
     }
@@ -123,7 +121,7 @@ u32 GetDepth(int x, int y) {
     case FramebufferRegs::DepthFormat::D24S8:
         return Color::DecodeD24S8(src_pixel).x;
     default:
-        LOG_CRITICAL(HW_GPU, "Unimplemented depth format %u",
+        LOG_CRITICAL(HW_GPU, "Unimplemented depth format {}",
                      static_cast<u32>(framebuffer.depth_format.Value()));
         UNIMPLEMENTED();
         return 0;
@@ -151,7 +149,7 @@ u8 GetStencil(int x, int y) {
     default:
         LOG_WARNING(
             HW_GPU,
-            "GetStencil called for function which doesn't have a stencil component (format %u)",
+            "GetStencil called for function which doesn't have a stencil component (format {})",
             static_cast<u32>(framebuffer.depth_format.Value()));
         return 0;
     }
@@ -185,7 +183,7 @@ void SetDepth(int x, int y, u32 value) {
         break;
 
     default:
-        LOG_CRITICAL(HW_GPU, "Unimplemented depth format %u",
+        LOG_CRITICAL(HW_GPU, "Unimplemented depth format {}",
                      static_cast<u32>(framebuffer.depth_format.Value()));
         UNIMPLEMENTED();
         break;
@@ -217,7 +215,7 @@ void SetStencil(int x, int y, u8 value) {
         break;
 
     default:
-        LOG_CRITICAL(HW_GPU, "Unimplemented depth format %u",
+        LOG_CRITICAL(HW_GPU, "Unimplemented depth format {}",
                      static_cast<u32>(framebuffer.depth_format.Value()));
         UNIMPLEMENTED();
         break;
@@ -253,7 +251,7 @@ u8 PerformStencilAction(FramebufferRegs::StencilAction action, u8 old_stencil, u
         return old_stencil - 1;
 
     default:
-        LOG_CRITICAL(HW_GPU, "Unknown stencil action %x", (int)action);
+        LOG_CRITICAL(HW_GPU, "Unknown stencil action {:x}", (int)action);
         UNIMPLEMENTED();
         return 0;
     }
@@ -297,12 +295,12 @@ Math::Vec4<u8> EvaluateBlendEquation(const Math::Vec4<u8>& src, const Math::Vec4
         break;
 
     default:
-        LOG_CRITICAL(HW_GPU, "Unknown RGB blend equation 0x%x", static_cast<u8>(equation));
+        LOG_CRITICAL(HW_GPU, "Unknown RGB blend equation 0x{:x}", static_cast<u8>(equation));
         UNIMPLEMENTED();
     }
 
-    return Math::Vec4<u8>(MathUtil::Clamp(result.r(), 0, 255), MathUtil::Clamp(result.g(), 0, 255),
-                          MathUtil::Clamp(result.b(), 0, 255), MathUtil::Clamp(result.a(), 0, 255));
+    return Math::Vec4<u8>(std::clamp(result.r(), 0, 255), std::clamp(result.g(), 0, 255),
+                          std::clamp(result.b(), 0, 255), std::clamp(result.a(), 0, 255));
 };
 
 u8 LogicOp(u8 src, u8 dest, FramebufferRegs::LogicOp op) {
@@ -400,7 +398,7 @@ void DrawShadowMapPixel(int x, int y, u32 depth, u8 stencil) {
             float16 linear = float16::FromRaw(shadow.linear);
             float16 x = float16::FromFloat32(static_cast<float>(depth) / ref_z);
             float16 stencil_new = float16::FromFloat32(stencil) / (constant + linear * x);
-            stencil = static_cast<u8>(MathUtil::Clamp(stencil_new.ToFloat32(), 0.0f, 255.0f));
+            stencil = static_cast<u8>(std::clamp(stencil_new.ToFloat32(), 0.0f, 255.0f));
 
             if (stencil < ref_s)
                 EncodeX24S8Shadow(stencil, dst_pixel);

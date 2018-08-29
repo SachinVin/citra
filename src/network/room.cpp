@@ -195,7 +195,7 @@ void Room::RoomImpl::StartLoop() {
 void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
     Packet packet;
     packet.Append(event->packet->data, event->packet->dataLength);
-    packet.IgnoreBytes(sizeof(u8)); // Igonore the message type
+    packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
     std::string nickname;
     packet >> nickname;
 
@@ -408,11 +408,11 @@ void Room::RoomImpl::HandleWifiPacket(const ENetEvent* event) {
         if (member != members.end()) {
             enet_peer_send(member->peer, 0, enet_packet);
         } else {
-            NGLOG_ERROR(Network,
-                        "Attempting to send to unknown MAC address: "
-                        "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                        destination_address[0], destination_address[1], destination_address[2],
-                        destination_address[3], destination_address[4], destination_address[5]);
+            LOG_ERROR(Network,
+                      "Attempting to send to unknown MAC address: "
+                      "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                      destination_address[0], destination_address[1], destination_address[2],
+                      destination_address[3], destination_address[4], destination_address[5]);
             enet_packet_destroy(enet_packet);
         }
     }
@@ -423,7 +423,7 @@ void Room::RoomImpl::HandleChatPacket(const ENetEvent* event) {
     Packet in_packet;
     in_packet.Append(event->packet->data, event->packet->dataLength);
 
-    in_packet.IgnoreBytes(sizeof(u8)); // Igonore the message type
+    in_packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
     std::string message;
     in_packet >> message;
     auto CompareNetworkAddress = [event](const Member member) -> bool {
@@ -465,7 +465,7 @@ void Room::RoomImpl::HandleGameNamePacket(const ENetEvent* event) {
     Packet in_packet;
     in_packet.Append(event->packet->data, event->packet->dataLength);
 
-    in_packet.IgnoreBytes(sizeof(u8)); // Igonore the message type
+    in_packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
     GameInfo game_info;
     in_packet >> game_info.name;
     in_packet >> game_info.id;

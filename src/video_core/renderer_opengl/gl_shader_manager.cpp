@@ -16,7 +16,7 @@ static void SetShaderUniformBlockBinding(GLuint shader, const char* name, Unifor
     }
     GLint ub_size = 0;
     glGetActiveUniformBlockiv(shader, ub_index, GL_UNIFORM_BLOCK_DATA_SIZE, &ub_size);
-    ASSERT_MSG(ub_size == expected_size, "Uniform block size did not match! Got %d, expected %zu",
+    ASSERT_MSG(ub_size == expected_size, "Uniform block size did not match! Got {}, expected {}",
                static_cast<int>(ub_size), expected_size);
     glUniformBlockBinding(shader, ub_index, static_cast<GLuint>(binding));
 }
@@ -36,6 +36,13 @@ static void SetShaderSamplerBinding(GLuint shader, const char* name,
     }
 }
 
+static void SetShaderImageBinding(GLuint shader, const char* name, GLuint binding) {
+    GLint uniform_tex = glGetUniformLocation(shader, name);
+    if (uniform_tex != -1) {
+        glUniform1i(uniform_tex, static_cast<GLint>(binding));
+    }
+}
+
 static void SetShaderSamplerBindings(GLuint shader) {
     OpenGLState cur_state = OpenGLState::GetCurState();
     GLuint old_program = std::exchange(cur_state.draw.shader_program, shader);
@@ -48,13 +55,16 @@ static void SetShaderSamplerBindings(GLuint shader) {
     SetShaderSamplerBinding(shader, "tex_cube", TextureUnits::TextureCube);
 
     // Set the texture samplers to correspond to different lookup table texture units
-    SetShaderSamplerBinding(shader, "lighting_lut", TextureUnits::LightingLUT);
-    SetShaderSamplerBinding(shader, "fog_lut", TextureUnits::FogLUT);
-    SetShaderSamplerBinding(shader, "proctex_noise_lut", TextureUnits::ProcTexNoiseLUT);
-    SetShaderSamplerBinding(shader, "proctex_color_map", TextureUnits::ProcTexColorMap);
-    SetShaderSamplerBinding(shader, "proctex_alpha_map", TextureUnits::ProcTexAlphaMap);
-    SetShaderSamplerBinding(shader, "proctex_lut", TextureUnits::ProcTexLUT);
-    SetShaderSamplerBinding(shader, "proctex_diff_lut", TextureUnits::ProcTexDiffLUT);
+    SetShaderSamplerBinding(shader, "texture_buffer_lut_rg", TextureUnits::TextureBufferLUT_RG);
+    SetShaderSamplerBinding(shader, "texture_buffer_lut_rgba", TextureUnits::TextureBufferLUT_RGBA);
+
+    SetShaderImageBinding(shader, "shadow_buffer", ImageUnits::ShadowBuffer);
+    SetShaderImageBinding(shader, "shadow_texture_px", ImageUnits::ShadowTexturePX);
+    SetShaderImageBinding(shader, "shadow_texture_nx", ImageUnits::ShadowTextureNX);
+    SetShaderImageBinding(shader, "shadow_texture_py", ImageUnits::ShadowTexturePY);
+    SetShaderImageBinding(shader, "shadow_texture_ny", ImageUnits::ShadowTextureNY);
+    SetShaderImageBinding(shader, "shadow_texture_pz", ImageUnits::ShadowTexturePZ);
+    SetShaderImageBinding(shader, "shadow_texture_nz", ImageUnits::ShadowTextureNZ);
 
     cur_state.draw.shader_program = old_program;
     cur_state.Apply();
@@ -206,8 +216,8 @@ using FragmentShaders =
 
 class ShaderProgramManager::Impl {
 public:
-    explicit Impl(bool separable)
-        : separable(separable), programmable_vertex_shaders(separable),
+    explicit Impl(bool separable, bool is_amd)
+        : is_amd(is_amd), separable(separable), programmable_vertex_shaders(separable),
           trivial_vertex_shader(separable), programmable_geometry_shaders(separable),
           fixed_geometry_shaders(separable), fragment_shaders(separable) {
         if (separable)
@@ -238,6 +248,8 @@ public:
         };
     };
 
+    bool is_amd;
+
     ShaderTuple current;
 
     ProgrammableVertexShaders programmable_vertex_shaders;
@@ -253,8 +265,8 @@ public:
     OGLPipeline pipeline;
 };
 
-ShaderProgramManager::ShaderProgramManager(bool separable)
-    : impl(std::make_unique<Impl>(separable)) {}
+ShaderProgramManager::ShaderProgramManager(bool separable, bool is_amd)
+    : impl(std::make_unique<Impl>(separable, is_amd)) {}
 
 ShaderProgramManager::~ShaderProgramManager() = default;
 
@@ -294,11 +306,15 @@ void ShaderProgramManager::UseFragmentShader(const GLShader::PicaFSConfig& confi
 
 void ShaderProgramManager::ApplyTo(OpenGLState& state) {
     if (impl->separable) {
-        // Without this reseting, AMD sometimes freezes when one stage is changed but not for the
-        // others
-        glUseProgramStages(impl->pipeline.handle,
-                           GL_VERTEX_SHADER_BIT | GL_GEOMETRY_SHADER_BIT | GL_FRAGMENT_SHADER_BIT,
-                           0);
+        if (impl->is_amd) {
+            // Without this reseting, AMD sometimes freezes when one stage is changed but not for
+            // the others.
+            // On the other hand, including this reset seems to introduce memory leak in Intel
+            // Graphics.
+            glUseProgramStages(
+                impl->pipeline.handle,
+                GL_VERTEX_SHADER_BIT | GL_GEOMETRY_SHADER_BIT | GL_FRAGMENT_SHADER_BIT, 0);
+        }
 
         glUseProgramStages(impl->pipeline.handle, GL_VERTEX_SHADER_BIT, impl->current.vs);
         glUseProgramStages(impl->pipeline.handle, GL_GEOMETRY_SHADER_BIT, impl->current.gs);

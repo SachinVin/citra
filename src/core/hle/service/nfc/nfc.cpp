@@ -19,7 +19,7 @@ void Module::Interface::Initialize(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
-    LOG_WARNING(Service_NFC, "(STUBBED) called, param=%u", param);
+    LOG_WARNING(Service_NFC, "(STUBBED) called, param={}", param);
 }
 
 void Module::Interface::Shutdown(Kernel::HLERequestContext& ctx) {
@@ -30,7 +30,7 @@ void Module::Interface::Shutdown(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
-    LOG_WARNING(Service_NFC, "(STUBBED) called, param=%u", param);
+    LOG_WARNING(Service_NFC, "(STUBBED) called, param={}", param);
 }
 
 void Module::Interface::StartCommunication(Kernel::HLERequestContext& ctx) {
@@ -66,7 +66,7 @@ void Module::Interface::StartTagScanning(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(result);
-    LOG_WARNING(Service_NFC, "(STUBBED) called, in_val=%04x", in_val);
+    LOG_WARNING(Service_NFC, "(STUBBED) called, in_val={:04x}", in_val);
 }
 
 void Module::Interface::StopTagScanning(Kernel::HLERequestContext& ctx) {

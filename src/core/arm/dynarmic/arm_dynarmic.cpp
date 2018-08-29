@@ -87,6 +87,8 @@ static void InterpreterFallback(u32 pc, Dynarmic::Jit* jit, void* user_arg) {
     jit->SetCpsr(state->Cpsr);
     jit->ExtRegs() = state->ExtReg;
     jit->SetFpscr(state->VFP[VFP_FPSCR]);
+
+    state->ServeBreak();
 }
 
 static bool IsReadOnlyMemory(u32 vaddr) {
@@ -99,7 +101,7 @@ static void AddTicks(u64 ticks) {
 }
 
 static u64 GetTicksRemaining() {
-    int ticks = CoreTiming::GetDowncount();
+    s64 ticks = CoreTiming::GetDowncount();
     return static_cast<u64>(ticks <= 0 ? 0 : ticks);
 }
 
@@ -233,6 +235,7 @@ void ARM_Dynarmic::ClearInstructionCache() {
     for (const auto& j : jits) {
         j.second->ClearCache();
     }
+    interpreter_state->instruction_cache.clear();
 }
 
 void ARM_Dynarmic::InvalidateCacheRange(u32 start_address, size_t length) {

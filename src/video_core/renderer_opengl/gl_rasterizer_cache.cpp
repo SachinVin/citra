@@ -26,6 +26,7 @@
 #include "core/memory.h"
 #include "core/settings.h"
 #include "video_core/pica_state.h"
+#include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/renderer_opengl.h"
@@ -160,7 +161,7 @@ constexpr auto RangeFromInterval(Map& map, const Interval& interval) {
 
 static u16 GetResolutionScaleFactor() {
     return !Settings::values.resolution_factor
-               ? VideoCore::g_emu_window->GetFramebufferLayout().GetScalingRatio()
+               ? VideoCore::g_renderer->GetRenderWindow().GetFramebufferLayout().GetScalingRatio()
                : Settings::values.resolution_factor;
 }
 
@@ -387,6 +388,11 @@ static bool BlitTextures(GLuint src_tex, const MathUtil::Rectangle<u32>& src_rec
         buffers = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
     }
 
+    // TODO (wwylele): use GL_NEAREST for shadow map texture
+    // Note: shadow map is treated as RGBA8 format in PICA, as well as in the rasterizer cache, but
+    // doing linear intepolation componentwise would cause incorrect value. However, for a
+    // well-programmed game this code path should be rarely executed for shadow map with
+    // inconsistent scale.
     glBlitFramebuffer(src_rect.left, src_rect.bottom, src_rect.right, src_rect.top, dst_rect.left,
                       dst_rect.bottom, dst_rect.right, dst_rect.top, buffers,
                       buffers == GL_COLOR_BUFFER_BIT ? GL_LINEAR : GL_NEAREST);
@@ -1454,14 +1460,11 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
     }
 
     MathUtil::Rectangle<u32> viewport_clamped{
+        static_cast<u32>(std::clamp(viewport_rect.left, 0, static_cast<s32>(config.GetWidth()))),
+        static_cast<u32>(std::clamp(viewport_rect.top, 0, static_cast<s32>(config.GetHeight()))),
+        static_cast<u32>(std::clamp(viewport_rect.right, 0, static_cast<s32>(config.GetWidth()))),
         static_cast<u32>(
-            MathUtil::Clamp(viewport_rect.left, 0, static_cast<s32>(config.GetWidth()))),
-        static_cast<u32>(
-            MathUtil::Clamp(viewport_rect.top, 0, static_cast<s32>(config.GetHeight()))),
-        static_cast<u32>(
-            MathUtil::Clamp(viewport_rect.right, 0, static_cast<s32>(config.GetWidth()))),
-        static_cast<u32>(
-            MathUtil::Clamp(viewport_rect.bottom, 0, static_cast<s32>(config.GetHeight())))};
+            std::clamp(viewport_rect.bottom, 0, static_cast<s32>(config.GetHeight())))};
 
     // get color and depth surfaces
     SurfaceParams color_params;

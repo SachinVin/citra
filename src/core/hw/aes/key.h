@@ -12,8 +12,20 @@ namespace HW {
 namespace AES {
 
 enum KeySlotID : size_t {
+
+    // Used to decrypt the SSL client cert/private-key stored in ClCertA.
+    SSLKey = 0x0D,
+
+    // AES keyslots used to decrypt NCCH
+    NCCHSecure1 = 0x2C,
+    NCCHSecure2 = 0x25,
+    NCCHSecure3 = 0x18,
+    NCCHSecure4 = 0x1B,
+
     // AES Keyslot used to generate the UDS data frame CCMP key.
     UDSDataKey = 0x2D,
+
+    // AES keyslot used for APT:Wrap/Unwrap functions
     APTWrap = 0x31,
 
     MaxKeySlotID = 0x40,

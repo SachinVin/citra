@@ -32,7 +32,7 @@ ResultVal<std::unique_ptr<DirectoryBackend>> SDMCWriteOnlyArchive::OpenDirectory
 
 ArchiveFactory_SDMCWriteOnly::ArchiveFactory_SDMCWriteOnly(const std::string& mount_point)
     : sdmc_directory(mount_point) {
-    LOG_DEBUG(Service_FS, "Directory %s set as SDMCWriteOnly.", sdmc_directory.c_str());
+    LOG_DEBUG(Service_FS, "Directory {} set as SDMCWriteOnly.", sdmc_directory);
 }
 
 bool ArchiveFactory_SDMCWriteOnly::Initialize() {
@@ -63,7 +63,7 @@ ResultCode ArchiveFactory_SDMCWriteOnly::Format(const Path& path,
 
 ResultVal<ArchiveFormatInfo> ArchiveFactory_SDMCWriteOnly::GetFormatInfo(const Path& path) const {
     // TODO(Subv): Implement
-    LOG_ERROR(Service_FS, "Unimplemented GetFormatInfo archive %s", GetName().c_str());
+    LOG_ERROR(Service_FS, "Unimplemented GetFormatInfo archive {}", GetName());
     return ResultCode(-1);
 }
 

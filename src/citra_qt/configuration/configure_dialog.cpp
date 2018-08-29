@@ -4,17 +4,20 @@
 
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_dialog.h"
+#include "citra_qt/hotkeys.h"
 #include "core/settings.h"
 #include "ui_configure.h"
 
-ConfigureDialog::ConfigureDialog(QWidget* parent) : QDialog(parent), ui(new Ui::ConfigureDialog) {
+ConfigureDialog::ConfigureDialog(QWidget* parent, const HotkeyRegistry& registry)
+    : QDialog(parent), ui(new Ui::ConfigureDialog) {
     ui->setupUi(this);
+    ui->generalTab->PopulateHotkeyList(registry);
     this->setConfiguration();
     connect(ui->generalTab, &ConfigureGeneral::languageChanged, this,
             &ConfigureDialog::onLanguageChanged);
 }
 
-ConfigureDialog::~ConfigureDialog() {}
+ConfigureDialog::~ConfigureDialog() = default;
 
 void ConfigureDialog::setConfiguration() {}
 
@@ -28,6 +31,7 @@ void ConfigureDialog::applyConfiguration() {
     ui->debugTab->applyConfiguration();
     ui->webTab->applyConfiguration();
     Settings::Apply();
+    Settings::LogSettings();
 }
 
 void ConfigureDialog::onLanguageChanged(const QString& locale) {
@@ -38,7 +42,7 @@ void ConfigureDialog::onLanguageChanged(const QString& locale) {
     ui->inputTab->retranslateUi();
     ui->graphicsTab->retranslateUi();
     ui->audioTab->retranslateUi();
-    ui->cameraTab->applyConfiguration();
+    ui->cameraTab->retranslateUi();
     ui->debugTab->retranslateUi();
     ui->webTab->retranslateUi();
 }

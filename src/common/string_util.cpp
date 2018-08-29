@@ -2,12 +2,12 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <boost/range/algorithm/transform.hpp>
 #include "common/common_paths.h"
 #include "common/logging/log.h"
 #include "common/string_util.h"
@@ -24,26 +24,16 @@ namespace Common {
 
 /// Make a string lowercase
 std::string ToLower(std::string str) {
-    boost::transform(str, str.begin(), ::tolower);
+    std::transform(str.begin(), str.end(), str.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
     return str;
 }
 
 /// Make a string uppercase
 std::string ToUpper(std::string str) {
-    boost::transform(str, str.begin(), ::toupper);
+    std::transform(str.begin(), str.end(), str.begin(),
+                   [](unsigned char c) { return std::toupper(c); });
     return str;
-}
-
-// faster than sscanf
-bool AsciiToHex(const char* _szValue, u32& result) {
-    char* endptr = nullptr;
-    const u32 value = strtoul(_szValue, &endptr, 16);
-
-    if (!endptr || *endptr)
-        return false;
-
-    result = value;
-    return true;
 }
 
 bool CharArrayFromFormatV(char* out, int outsize, const char* format, va_list args) {
@@ -107,7 +97,7 @@ std::string StringFromFormat(const char* format, ...) {
 #else
     va_start(args, format);
     if (vasprintf(&buf, format, args) < 0)
-        NGLOG_ERROR(Common, "Unable to allocate memory for string");
+        LOG_ERROR(Common, "Unable to allocate memory for string");
     va_end(args);
 
     std::string temp = buf;
@@ -240,21 +230,21 @@ void SplitString(const std::string& str, const char delim, std::vector<std::stri
     std::istringstream iss(str);
     output.resize(1);
 
-    while (std::getline(iss, *output.rbegin(), delim))
-        output.push_back("");
+    while (std::getline(iss, *output.rbegin(), delim)) {
+        output.emplace_back();
+    }
 
     output.pop_back();
 }
 
-std::string TabsToSpaces(int tab_size, const std::string& in) {
-    const std::string spaces(tab_size, ' ');
-    std::string out(in);
-
+std::string TabsToSpaces(int tab_size, std::string in) {
     size_t i = 0;
-    while (out.npos != (i = out.find('\t')))
-        out.replace(i, 1, spaces);
 
-    return out;
+    while ((i = in.find('\t')) != std::string::npos) {
+        in.replace(i, 1, tab_size, ' ');
+    }
+
+    return in;
 }
 
 std::string ReplaceAll(std::string result, const std::string& src, const std::string& dest) {
@@ -298,31 +288,37 @@ std::u16string UTF8ToUTF16(const std::string& input) {
 }
 
 static std::wstring CPToUTF16(u32 code_page, const std::string& input) {
-    auto const size =
+    const auto size =
         MultiByteToWideChar(code_page, 0, input.data(), static_cast<int>(input.size()), nullptr, 0);
 
-    std::wstring output;
-    output.resize(size);
+    if (size == 0) {
+        return L"";
+    }
 
-    if (size == 0 ||
-        size != MultiByteToWideChar(code_page, 0, input.data(), static_cast<int>(input.size()),
-                                    &output[0], static_cast<int>(output.size())))
+    std::wstring output(size, L'\0');
+
+    if (size != MultiByteToWideChar(code_page, 0, input.data(), static_cast<int>(input.size()),
+                                    &output[0], static_cast<int>(output.size()))) {
         output.clear();
+    }
 
     return output;
 }
 
 std::string UTF16ToUTF8(const std::wstring& input) {
-    auto const size = WideCharToMultiByte(CP_UTF8, 0, input.data(), static_cast<int>(input.size()),
+    const auto size = WideCharToMultiByte(CP_UTF8, 0, input.data(), static_cast<int>(input.size()),
                                           nullptr, 0, nullptr, nullptr);
+    if (size == 0) {
+        return "";
+    }
 
-    std::string output;
-    output.resize(size);
+    std::string output(size, '\0');
 
-    if (size == 0 ||
-        size != WideCharToMultiByte(CP_UTF8, 0, input.data(), static_cast<int>(input.size()),
-                                    &output[0], static_cast<int>(output.size()), nullptr, nullptr))
+    if (size != WideCharToMultiByte(CP_UTF8, 0, input.data(), static_cast<int>(input.size()),
+                                    &output[0], static_cast<int>(output.size()), nullptr,
+                                    nullptr)) {
         output.clear();
+    }
 
     return output;
 }
@@ -343,11 +339,9 @@ std::string CP1252ToUTF8(const std::string& input) {
 
 template <typename T>
 static std::string CodeToUTF8(const char* fromcode, const std::basic_string<T>& input) {
-    std::string result;
-
     iconv_t const conv_desc = iconv_open("UTF-8", fromcode);
     if ((iconv_t)(-1) == conv_desc) {
-        NGLOG_ERROR(Common, "Iconv initialization failure [{}]: {}", fromcode, strerror(errno));
+        LOG_ERROR(Common, "Iconv initialization failure [{}]: {}", fromcode, strerror(errno));
         iconv_close(conv_desc);
         return {};
     }
@@ -356,8 +350,7 @@ static std::string CodeToUTF8(const char* fromcode, const std::basic_string<T>& 
     // Multiply by 4, which is the max number of bytes to encode a codepoint
     const size_t out_buffer_size = 4 * in_bytes;
 
-    std::string out_buffer;
-    out_buffer.resize(out_buffer_size);
+    std::string out_buffer(out_buffer_size, '\0');
 
     auto src_buffer = &input[0];
     size_t src_bytes = in_bytes;
@@ -376,12 +369,13 @@ static std::string CodeToUTF8(const char* fromcode, const std::basic_string<T>& 
                     ++src_buffer;
                 }
             } else {
-                NGLOG_ERROR(Common, "iconv failure [{}]: {}", fromcode, strerror(errno));
+                LOG_ERROR(Common, "iconv failure [{}]: {}", fromcode, strerror(errno));
                 break;
             }
         }
     }
 
+    std::string result;
     out_buffer.resize(out_buffer_size - dst_bytes);
     out_buffer.swap(result);
 
@@ -391,11 +385,9 @@ static std::string CodeToUTF8(const char* fromcode, const std::basic_string<T>& 
 }
 
 std::u16string UTF8ToUTF16(const std::string& input) {
-    std::u16string result;
-
     iconv_t const conv_desc = iconv_open("UTF-16LE", "UTF-8");
     if ((iconv_t)(-1) == conv_desc) {
-        NGLOG_ERROR(Common, "Iconv initialization failure [UTF-8]: {}", strerror(errno));
+        LOG_ERROR(Common, "Iconv initialization failure [UTF-8]: {}", strerror(errno));
         iconv_close(conv_desc);
         return {};
     }
@@ -404,8 +396,7 @@ std::u16string UTF8ToUTF16(const std::string& input) {
     // Multiply by 4, which is the max number of bytes to encode a codepoint
     const size_t out_buffer_size = 4 * sizeof(char16_t) * in_bytes;
 
-    std::u16string out_buffer;
-    out_buffer.resize(out_buffer_size);
+    std::u16string out_buffer(out_buffer_size, char16_t{});
 
     char* src_buffer = const_cast<char*>(&input[0]);
     size_t src_bytes = in_bytes;
@@ -424,12 +415,13 @@ std::u16string UTF8ToUTF16(const std::string& input) {
                     ++src_buffer;
                 }
             } else {
-                NGLOG_ERROR(Common, "iconv failure [UTF-8]: {}", strerror(errno));
+                LOG_ERROR(Common, "iconv failure [UTF-8]: {}", strerror(errno));
                 break;
             }
         }
     }
 
+    std::u16string result;
     out_buffer.resize(out_buffer_size - dst_bytes);
     out_buffer.swap(result);
 

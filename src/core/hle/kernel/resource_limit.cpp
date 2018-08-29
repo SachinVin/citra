@@ -55,7 +55,7 @@ s32 ResourceLimit::GetCurrentResourceValue(u32 resource) const {
     case CPU_TIME:
         return current_cpu_time;
     default:
-        LOG_ERROR(Kernel, "Unknown resource type=%08X", resource);
+        LOG_ERROR(Kernel, "Unknown resource type={:08X}", resource);
         UNIMPLEMENTED();
         return 0;
     }
@@ -84,7 +84,7 @@ u32 ResourceLimit::GetMaxResourceValue(u32 resource) const {
     case CPU_TIME:
         return max_cpu_time;
     default:
-        LOG_ERROR(Kernel, "Unknown resource type=%08X", resource);
+        LOG_ERROR(Kernel, "Unknown resource type={:08X}", resource);
         UNIMPLEMENTED();
         return 0;
     }

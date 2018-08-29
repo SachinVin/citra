@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <glad/glad.h>
+#include "video_core/regs_lighting.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/renderer_opengl/gl_shader_gen.h"
 #include "video_core/renderer_opengl/pica_to_gl.h"
@@ -32,10 +33,20 @@ struct UniformData {
     GLint alphatest_ref;
     GLfloat depth_scale;
     GLfloat depth_offset;
+    GLfloat shadow_bias_constant;
+    GLfloat shadow_bias_linear;
     GLint scissor_x1;
     GLint scissor_y1;
     GLint scissor_x2;
     GLint scissor_y2;
+    GLint fog_lut_offset;
+    GLint proctex_noise_lut_offset;
+    GLint proctex_color_map_offset;
+    GLint proctex_alpha_map_offset;
+    GLint proctex_lut_offset;
+    GLint proctex_diff_lut_offset;
+    GLfloat proctex_bias;
+    alignas(16) GLivec4 lighting_lut_offset[Pica::LightingRegs::NumLightingSampler / 4];
     alignas(16) GLvec3 fog_color;
     alignas(8) GLvec2 proctex_noise_f;
     alignas(8) GLvec2 proctex_noise_a;
@@ -48,7 +59,7 @@ struct UniformData {
 };
 
 static_assert(
-    sizeof(UniformData) == 0x460,
+    sizeof(UniformData) == 0x4F0,
     "The size of the UniformData structure has changed, update the structure in the shader");
 static_assert(sizeof(UniformData) < 16384,
               "UniformData structure must be less than 16kb as per the OpenGL spec");
@@ -88,7 +99,7 @@ static_assert(sizeof(GSUniformData) < 16384,
 /// A class that manage different shader stages and configures them with given config data.
 class ShaderProgramManager {
 public:
-    explicit ShaderProgramManager(bool separable);
+    ShaderProgramManager(bool separable, bool is_amd);
     ~ShaderProgramManager();
 
     bool UseProgrammableVertexShader(const GLShader::PicaVSConfig& config,

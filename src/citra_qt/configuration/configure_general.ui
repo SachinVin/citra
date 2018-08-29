@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>345</width>
-    <height>493</height>
+    <height>504</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -28,13 +28,6 @@
            <widget class="QCheckBox" name="toggle_check_exit">
             <property name="text">
              <string>Confirm exit while emulation is running</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QCheckBox" name="toggle_deepscan">
-            <property name="text">
-             <string>Search sub-directories for games</string>
             </property>
            </widget>
           </item>
@@ -76,26 +69,6 @@
            <widget class="QCheckBox" name="toggle_auto_update">
             <property name="text">
              <string>Silently auto update after closing</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-       </layout>
-      </widget>
-     </item>
-     <item>
-      <widget class="QGroupBox" name="groupBox_2">
-       <property name="title">
-        <string>Performance</string>
-       </property>
-       <layout class="QHBoxLayout" name="horizontalLayout_7">
-        <item>
-         <layout class="QVBoxLayout" name="verticalLayout_5">
-          <item>
-           <widget class="QCheckBox" name="toggle_cpu_jit">
-            <property name="text">
-             <string>Enable CPU JIT</string>
             </property>
            </widget>
           </item>
@@ -208,7 +181,7 @@
         <item>
          <layout class="QVBoxLayout" name="verticalLayout_4">
           <item>
-           <widget class="GHotkeysDialog" name="widget" native="true"/>
+           <widget class="GHotkeysDialog" name="hotkeysDialog" native="true"/>
           </item>
          </layout>
         </item>

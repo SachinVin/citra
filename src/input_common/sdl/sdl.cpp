@@ -32,7 +32,7 @@ public:
     explicit SDLJoystick(int joystick_index)
         : joystick{SDL_JoystickOpen(joystick_index), SDL_JoystickClose} {
         if (!joystick) {
-            NGLOG_ERROR(Input, "failed to open joystick {}", joystick_index);
+            LOG_ERROR(Input, "failed to open joystick {}", joystick_index);
         }
     }
 
@@ -82,7 +82,7 @@ private:
 class SDLButton final : public Input::ButtonDevice {
 public:
     explicit SDLButton(std::shared_ptr<SDLJoystick> joystick_, int button_)
-        : joystick(joystick_), button(button_) {}
+        : joystick(std::move(joystick_)), button(button_) {}
 
     bool GetStatus() const override {
         return joystick->GetButton(button);
@@ -96,7 +96,7 @@ private:
 class SDLDirectionButton final : public Input::ButtonDevice {
 public:
     explicit SDLDirectionButton(std::shared_ptr<SDLJoystick> joystick_, int hat_, Uint8 direction_)
-        : joystick(joystick_), hat(hat_), direction(direction_) {}
+        : joystick(std::move(joystick_)), hat(hat_), direction(direction_) {}
 
     bool GetStatus() const override {
         return joystick->GetHatDirection(hat, direction);
@@ -112,7 +112,7 @@ class SDLAxisButton final : public Input::ButtonDevice {
 public:
     explicit SDLAxisButton(std::shared_ptr<SDLJoystick> joystick_, int axis_, float threshold_,
                            bool trigger_if_greater_)
-        : joystick(joystick_), axis(axis_), threshold(threshold_),
+        : joystick(std::move(joystick_)), axis(axis_), threshold(threshold_),
           trigger_if_greater(trigger_if_greater_) {}
 
     bool GetStatus() const override {
@@ -132,7 +132,7 @@ private:
 class SDLAnalog final : public Input::AnalogDevice {
 public:
     SDLAnalog(std::shared_ptr<SDLJoystick> joystick_, int axis_x_, int axis_y_)
-        : joystick(joystick_), axis_x(axis_x_), axis_y(axis_y_) {}
+        : joystick(std::move(joystick_)), axis_x(axis_x_), axis_y(axis_y_) {}
 
     std::tuple<float, float> GetStatus() const override {
         return joystick->GetAnalog(axis_x, axis_y);
@@ -204,7 +204,7 @@ public:
                 trigger_if_greater = false;
             } else {
                 trigger_if_greater = true;
-                NGLOG_ERROR(Input, "Unknown direction {}", direction_name);
+                LOG_ERROR(Input, "Unknown direction {}", direction_name);
             }
             return std::make_unique<SDLAxisButton>(GetJoystick(joystick_index), axis, threshold,
                                                    trigger_if_greater);
@@ -235,7 +235,7 @@ public:
 
 void Init() {
     if (SDL_Init(SDL_INIT_JOYSTICK) < 0) {
-        NGLOG_CRITICAL(Input, "SDL_Init(SDL_INIT_JOYSTICK) failed with: {}", SDL_GetError());
+        LOG_CRITICAL(Input, "SDL_Init(SDL_INIT_JOYSTICK) failed with: {}", SDL_GetError());
     } else {
         using namespace Input;
         RegisterFactory<ButtonDevice>("sdl", std::make_shared<SDLButtonFactory>());
@@ -314,10 +314,6 @@ namespace Polling {
 
 class SDLPoller : public InputCommon::Polling::DevicePoller {
 public:
-    SDLPoller() = default;
-
-    ~SDLPoller() = default;
-
     void Start() override {
         // SDL joysticks must be opened, otherwise they don't generate events
         SDL_JoystickUpdate();
@@ -341,10 +337,6 @@ private:
 
 class SDLButtonPoller final : public SDLPoller {
 public:
-    SDLButtonPoller() = default;
-
-    ~SDLButtonPoller() = default;
-
     Common::ParamPackage GetNextInput() override {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -364,10 +356,6 @@ public:
 
 class SDLAnalogPoller final : public SDLPoller {
 public:
-    SDLAnalogPoller() = default;
-
-    ~SDLAnalogPoller() = default;
-
     void Start() override {
         SDLPoller::Start();
 
@@ -414,18 +402,16 @@ private:
     SDL_JoystickID analog_axes_joystick = -1;
 };
 
-std::vector<std::unique_ptr<InputCommon::Polling::DevicePoller>> GetPollers(
-    InputCommon::Polling::DeviceType type) {
-    std::vector<std::unique_ptr<InputCommon::Polling::DevicePoller>> pollers;
+void GetPollers(InputCommon::Polling::DeviceType type,
+                std::vector<std::unique_ptr<InputCommon::Polling::DevicePoller>>& pollers) {
     switch (type) {
     case InputCommon::Polling::DeviceType::Analog:
-        pollers.push_back(std::make_unique<SDLAnalogPoller>());
+        pollers.emplace_back(std::make_unique<SDLAnalogPoller>());
         break;
     case InputCommon::Polling::DeviceType::Button:
-        pollers.push_back(std::make_unique<SDLButtonPoller>());
+        pollers.emplace_back(std::make_unique<SDLButtonPoller>());
         break;
     }
-    return pollers;
 }
 } // namespace Polling
 } // namespace SDL

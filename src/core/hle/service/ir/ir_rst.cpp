@@ -48,7 +48,7 @@ void IR_RST::UnloadInputDevices() {
     c_stick = nullptr;
 }
 
-void IR_RST::UpdateCallback(u64 userdata, int cycles_late) {
+void IR_RST::UpdateCallback(u64 userdata, s64 cycles_late) {
     SharedMem* mem = reinterpret_cast<SharedMem*>(shared_memory->GetPointer());
 
     if (is_device_reload_pending.exchange(false))
@@ -131,7 +131,7 @@ void IR_RST::Initialize(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
 
-    LOG_DEBUG(Service_IR, "called. update_period=%d, raw_c_stick=%d", update_period, raw_c_stick);
+    LOG_DEBUG(Service_IR, "called. update_period={}, raw_c_stick={}", update_period, raw_c_stick);
 }
 
 void IR_RST::Shutdown(Kernel::HLERequestContext& ctx) {
@@ -155,7 +155,7 @@ IR_RST::IR_RST() : ServiceFramework("ir:rst", 1) {
     update_event = Event::Create(ResetType::OneShot, "IRRST:UpdateEvent");
 
     update_callback_id =
-        CoreTiming::RegisterEvent("IRRST:UpdateCallBack", [this](u64 userdata, int cycles_late) {
+        CoreTiming::RegisterEvent("IRRST:UpdateCallBack", [this](u64 userdata, s64 cycles_late) {
             UpdateCallback(userdata, cycles_late);
         });
 

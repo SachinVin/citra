@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <vector>
@@ -10,7 +11,6 @@
 #include "audio_core/time_stretch.h"
 #include "common/common_types.h"
 #include "common/logging/log.h"
-#include "common/math_util.h"
 
 using steady_clock = std::chrono::steady_clock;
 
@@ -20,7 +20,7 @@ constexpr double MIN_RATIO = 0.1;
 constexpr double MAX_RATIO = 100.0;
 
 static double ClampRatio(double ratio) {
-    return MathUtil::Clamp(ratio, MIN_RATIO, MAX_RATIO);
+    return std::clamp(ratio, MIN_RATIO, MAX_RATIO);
 }
 
 constexpr double MIN_DELAY_TIME = 0.05;            // Units: seconds
@@ -55,7 +55,7 @@ std::vector<s16> TimeStretcher::Process(size_t samples_in_queue) {
     std::vector<s16> samples = GetSamples();
     if (samples_in_queue >= DROP_FRAMES_SAMPLE_DELAY) {
         samples.clear();
-        NGLOG_DEBUG(Audio, "Dropping frames!");
+        LOG_DEBUG(Audio, "Dropping frames!");
     }
     return samples;
 }

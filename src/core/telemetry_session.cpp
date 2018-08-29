@@ -50,14 +50,14 @@ u64 GetTelemetryId() {
     if (FileUtil::Exists(filename)) {
         FileUtil::IOFile file(filename, "rb");
         if (!file.IsOpen()) {
-            LOG_ERROR(Core, "failed to open telemetry_id: %s", filename.c_str());
+            LOG_ERROR(Core, "failed to open telemetry_id: {}", filename);
             return {};
         }
         file.ReadBytes(&telemetry_id, sizeof(u64));
     } else {
         FileUtil::IOFile file(filename, "wb");
         if (!file.IsOpen()) {
-            LOG_ERROR(Core, "failed to open telemetry_id: %s", filename.c_str());
+            LOG_ERROR(Core, "failed to open telemetry_id: {}", filename);
             return {};
         }
         telemetry_id = GenerateTelemetryId();
@@ -73,7 +73,7 @@ u64 RegenerateTelemetryId() {
 
     FileUtil::IOFile file(filename, "wb");
     if (!file.IsOpen()) {
-        LOG_ERROR(Core, "failed to open telemetry_id: %s", filename.c_str());
+        LOG_ERROR(Core, "failed to open telemetry_id: {}", filename);
         return {};
     }
     file.WriteBytes(&new_telemetry_id, sizeof(u64));
@@ -162,6 +162,7 @@ TelemetrySession::TelemetrySession() {
 #endif
 
     // Log user configuration information
+    AddField(Telemetry::FieldType::UserConfig, "Audio_SinkId", Settings::values.sink_id);
     AddField(Telemetry::FieldType::UserConfig, "Audio_EnableAudioStretching",
              Settings::values.enable_audio_stretching);
     AddField(Telemetry::FieldType::UserConfig, "Core_UseCpuJit", Settings::values.use_cpu_jit);
@@ -172,9 +173,17 @@ TelemetrySession::TelemetrySession() {
     AddField(Telemetry::FieldType::UserConfig, "Renderer_FrameLimit", Settings::values.frame_limit);
     AddField(Telemetry::FieldType::UserConfig, "Renderer_UseHwRenderer",
              Settings::values.use_hw_renderer);
+    AddField(Telemetry::FieldType::UserConfig, "Renderer_UseHwShader",
+             Settings::values.use_hw_shader);
+    AddField(Telemetry::FieldType::UserConfig, "Renderer_ShadersAccurateGs",
+             Settings::values.shaders_accurate_gs);
+    AddField(Telemetry::FieldType::UserConfig, "Renderer_ShadersAccurateMul",
+             Settings::values.shaders_accurate_mul);
     AddField(Telemetry::FieldType::UserConfig, "Renderer_UseShaderJit",
              Settings::values.use_shader_jit);
     AddField(Telemetry::FieldType::UserConfig, "Renderer_UseVsync", Settings::values.use_vsync);
+    AddField(Telemetry::FieldType::UserConfig, "Renderer_Toggle3d", Settings::values.toggle_3d);
+    AddField(Telemetry::FieldType::UserConfig, "Renderer_Factor3d", Settings::values.factor_3d);
     AddField(Telemetry::FieldType::UserConfig, "System_IsNew3ds", Settings::values.is_new_3ds);
     AddField(Telemetry::FieldType::UserConfig, "System_RegionValue", Settings::values.region_value);
 }

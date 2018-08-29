@@ -11,11 +11,11 @@
 #include "common/assert.h"
 #include "common/common_types.h"
 #include "common/logging/log.h"
+#include "core/core.h"
 #include "core/hle/config_mem.h"
 #include "core/hle/kernel/memory.h"
 #include "core/hle/kernel/vm_manager.h"
 #include "core/hle/result.h"
-#include "core/hle/shared_page.h"
 #include "core/memory.h"
 #include "core/memory_setup.h"
 
@@ -115,7 +115,7 @@ void HandleSpecialMapping(VMManager& address_space, const AddressMapping& mappin
 
     VAddr mapping_limit = mapping.address + mapping.size;
     if (mapping_limit < mapping.address) {
-        LOG_CRITICAL(Loader, "Mapping size overflowed: address=0x%08" PRIX32 " size=0x%" PRIX32,
+        LOG_CRITICAL(Loader, "Mapping size overflowed: address=0x{:08X} size=0x{:X}",
                      mapping.address, mapping.size);
         return;
     }
@@ -127,15 +127,15 @@ void HandleSpecialMapping(VMManager& address_space, const AddressMapping& mappin
         });
     if (area == std::end(memory_areas)) {
         LOG_ERROR(Loader,
-                  "Unhandled special mapping: address=0x%08" PRIX32 " size=0x%" PRIX32
-                  " read_only=%d unk_flag=%d",
+                  "Unhandled special mapping: address=0x{:08X} size=0x{:X}"
+                  " read_only={} unk_flag={}",
                   mapping.address, mapping.size, mapping.read_only, mapping.unk_flag);
         return;
     }
 
     u32 offset_into_region = mapping.address - area->vaddr_base;
     if (area->paddr_base == IO_AREA_PADDR) {
-        LOG_ERROR(Loader, "MMIO mappings are not supported yet. phys_addr=0x%08" PRIX32,
+        LOG_ERROR(Loader, "MMIO mappings are not supported yet. phys_addr=0x{:08X}",
                   area->paddr_base + offset_into_region);
         return;
     }
@@ -160,11 +160,14 @@ void MapSharedPages(VMManager& address_space) {
                            .Unwrap();
     address_space.Reprotect(cfg_mem_vma, VMAPermission::Read);
 
-    auto shared_page_vma = address_space
-                               .MapBackingMemory(Memory::SHARED_PAGE_VADDR,
-                                                 reinterpret_cast<u8*>(&SharedPage::shared_page),
-                                                 Memory::SHARED_PAGE_SIZE, MemoryState::Shared)
-                               .Unwrap();
+    auto shared_page_vma =
+        address_space
+            .MapBackingMemory(
+                Memory::SHARED_PAGE_VADDR,
+                reinterpret_cast<u8*>(
+                    &Core::System::GetInstance().GetSharedPageHandler()->GetSharedPage()),
+                Memory::SHARED_PAGE_SIZE, MemoryState::Shared)
+            .Unwrap();
     address_space.Reprotect(shared_page_vma, VMAPermission::Read);
 }
 

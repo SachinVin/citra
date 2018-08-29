@@ -208,21 +208,21 @@ u64 CIAContainer::GetContentSize(u16 index) const {
 }
 
 void CIAContainer::Print() const {
-    LOG_DEBUG(Service_FS, "Type:               %u", static_cast<u32>(cia_header.type));
-    LOG_DEBUG(Service_FS, "Version:            %u\n", static_cast<u32>(cia_header.version));
+    LOG_DEBUG(Service_FS, "Type:               {}", static_cast<u32>(cia_header.type));
+    LOG_DEBUG(Service_FS, "Version:            {}\n", static_cast<u32>(cia_header.version));
 
-    LOG_DEBUG(Service_FS, "Certificate Size: 0x%08x bytes", GetCertificateSize());
-    LOG_DEBUG(Service_FS, "Ticket Size:      0x%08x bytes", GetTicketSize());
-    LOG_DEBUG(Service_FS, "TMD Size:         0x%08x bytes", GetTitleMetadataSize());
-    LOG_DEBUG(Service_FS, "Meta Size:        0x%08x bytes", GetMetadataSize());
-    LOG_DEBUG(Service_FS, "Content Size:     0x%08" PRIx64 " bytes\n", GetTotalContentSize());
+    LOG_DEBUG(Service_FS, "Certificate Size: 0x{:08x} bytes", GetCertificateSize());
+    LOG_DEBUG(Service_FS, "Ticket Size:      0x{:08x} bytes", GetTicketSize());
+    LOG_DEBUG(Service_FS, "TMD Size:         0x{:08x} bytes", GetTitleMetadataSize());
+    LOG_DEBUG(Service_FS, "Meta Size:        0x{:08x} bytes", GetMetadataSize());
+    LOG_DEBUG(Service_FS, "Content Size:     0x{:08x} bytes\n", GetTotalContentSize());
 
-    LOG_DEBUG(Service_FS, "Certificate Offset: 0x%08" PRIx64 " bytes", GetCertificateOffset());
-    LOG_DEBUG(Service_FS, "Ticket Offset:      0x%08" PRIx64 " bytes", GetTicketOffset());
-    LOG_DEBUG(Service_FS, "TMD Offset:         0x%08" PRIx64 " bytes", GetTitleMetadataOffset());
-    LOG_DEBUG(Service_FS, "Meta Offset:        0x%08" PRIx64 " bytes", GetMetadataOffset());
+    LOG_DEBUG(Service_FS, "Certificate Offset: 0x{:08x} bytes", GetCertificateOffset());
+    LOG_DEBUG(Service_FS, "Ticket Offset:      0x{:08x} bytes", GetTicketOffset());
+    LOG_DEBUG(Service_FS, "TMD Offset:         0x{:08x} bytes", GetTitleMetadataOffset());
+    LOG_DEBUG(Service_FS, "Meta Offset:        0x{:08x} bytes", GetMetadataOffset());
     for (u16 i = 0; i < cia_tmd.GetContentCount(); i++) {
-        LOG_DEBUG(Service_FS, "Content %x Offset:   0x%08" PRIx64 " bytes", i, GetContentOffset(i));
+        LOG_DEBUG(Service_FS, "Content {:x} Offset:   0x{:08x} bytes", i, GetContentOffset(i));
     }
 }
 } // namespace FileSys

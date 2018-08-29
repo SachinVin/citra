@@ -7,7 +7,7 @@
 #include "common/swap.h"
 #include "core/arm/skyeye_common/armstate.h"
 #include "core/arm/skyeye_common/vfp/vfp.h"
-#include "core/gdbstub/gdbstub.h"
+#include "core/core.h"
 #include "core/memory.h"
 
 ARMul_State::ARMul_State(PrivilegeMode initial_mode) {
@@ -183,7 +183,7 @@ void ARMul_State::ResetMPCoreCP15Registers() {
 
 static void CheckMemoryBreakpoint(u32 address, GDBStub::BreakpointType type) {
     if (GDBStub::IsServerEnabled() && GDBStub::CheckBreakpoint(address, type)) {
-        NGLOG_DEBUG(Debug, "Found memory breakpoint @ {:08x}", address);
+        LOG_DEBUG(Debug, "Found memory breakpoint @ {:08x}", address);
         GDBStub::Break(true);
     }
 }
@@ -428,8 +428,8 @@ u32 ARMul_State::ReadCP15Register(u32 crn, u32 opcode_1, u32 crm, u32 opcode_2) 
         }
     }
 
-    NGLOG_ERROR(Core_ARM11, "MRC CRn={}, CRm={}, OP1={} OP2={} is not implemented. Returning zero.",
-                crn, crm, opcode_1, opcode_2);
+    LOG_ERROR(Core_ARM11, "MRC CRn={}, CRm={}, OP1={} OP2={} is not implemented. Returning zero.",
+              crn, crm, opcode_1, opcode_2);
     return 0;
 }
 
@@ -593,5 +593,22 @@ void ARMul_State::WriteCP15Register(u32 value, u32 crn, u32 opcode_1, u32 crm, u
             CP15[CP15_DATA_MEMORY_BARRIER] = value;
     } else if (crn == 13 && opcode_1 == 0 && crm == 0 && opcode_2 == 2) {
         CP15[CP15_THREAD_UPRW] = value;
+    }
+}
+
+void ARMul_State::ServeBreak() {
+    if (!GDBStub::IsServerEnabled()) {
+        return;
+    }
+
+    if (last_bkpt_hit) {
+        Reg[15] = last_bkpt.address;
+    }
+    Kernel::Thread* thread = Kernel::GetCurrentThread();
+    Core::CPU().SaveContext(thread->context);
+    if (last_bkpt_hit || GDBStub::GetCpuStepFlag()) {
+        last_bkpt_hit = false;
+        GDBStub::Break();
+        GDBStub::SendTrap(thread, 5);
     }
 }

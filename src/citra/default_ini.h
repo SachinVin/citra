@@ -61,11 +61,28 @@ c_stick=
 #      - "update_period": update period in milliseconds (default to 100)
 #      - "sensitivity": the coefficient converting mouse movement to tilting angle (default to 0.01)
 #      - "tilt_clamp": the max value of the tilt angle in degrees (default to 90)
+#  - "cemuhookudp" reads motion input from a udp server that uses cemuhook's udp protocol
 motion_device=
 
 # for touch input, the following devices are available:
 #  - "emu_window" (default) for emulating touch input from mouse input to the emulation window. No parameters required
+#  - "cemuhookudp" reads touch input from a udp server that uses cemuhook's udp protocol
+#      - "min_x", "min_y", "max_x", "max_y": defines the udp device's touch screen coordinate system
 touch_device=
+
+# Most desktop operating systems do not expose a way to poll the motion state of the controllers
+# so as a way around it, cemuhook created a udp client/server protocol to broadcast the data directly
+# from a controller device to the client program. Citra has a client that can connect and read
+# from any cemuhook compatible motion program.
+
+# IPv4 address of the udp input server (Default "127.0.0.1")
+udp_input_address=
+
+# Port of the udp input server. (Default 26760)
+udp_input_port=
+
+# The pad to request data on. Should be between 0 (Pad 1) and 3 (Pad 4). (Default 0)
+udp_pad_index=
 
 [Core]
 # Whether to use the Just-In-Time (JIT) compiler for CPU emulation
@@ -111,10 +128,18 @@ use_frame_limit =
 frame_limit =
 
 # The clear color for the renderer. What shows up on the sides of the bottom screen.
-# Must be in range of 0.0-1.0. Defaults to 1.0 for all.
+# Must be in range of 0.0-1.0. Defaults to 0.0 for all.
 bg_red =
 bg_blue =
 bg_green =
+
+# Toggles Stereoscopic 3D
+# 0 (default): Off, 1: On
+toggle_3d =
+
+# Change 3D Intensity
+# 0 - 100: Intensity. 0 (default)
+factor_3d =
 
 [Layout]
 # Layout for the screen inside the render window.
@@ -156,6 +181,10 @@ enable_audio_stretching =
 # auto (default): Auto-select
 output_device =
 
+# Output volume.
+# 1.0 (default): 100%, 0.0; mute
+volume =
+
 [Data Storage]
 # Whether to create a virtual SD card.
 # 1 (default): Yes, 0: No
@@ -169,6 +198,15 @@ is_new_3ds =
 # The system region that Citra will use during emulation
 # -1: Auto-select (default), 0: Japan, 1: USA, 2: Europe, 3: Australia, 4: China, 5: Korea, 6: Taiwan
 region_value =
+
+# The clock to use when citra starts
+# 0: System clock (default), 1: fixed time
+init_clock =
+
+# Time used when init_clock is set to fixed_time in the format %Y-%m-%d %H:%M:%S
+# set to fixed time. Default 2000-01-01 00:00:01
+# Note: 3DS can only handle times later then Jan 1 2000
+init_time =
 
 [Camera]
 # Which camera engine to use for the right outer camera
@@ -201,6 +239,7 @@ log_filter = *:Info
 # Port for listening to GDB connections.
 use_gdbstub=false
 gdbstub_port=24689
+# To LLE a service module add "LLE\<module name>=true"
 
 [WebService]
 # Whether or not to enable telemetry

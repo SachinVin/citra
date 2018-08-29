@@ -58,7 +58,7 @@ void RO::Initialize(Kernel::HLERequestContext& ctx) {
     // All other service functions below have the same issue.
     auto process = rp.PopObject<Kernel::Process>();
 
-    LOG_DEBUG(Service_LDR, "called, crs_buffer_ptr=0x%08X, crs_address=0x%08X, crs_size=0x%X",
+    LOG_DEBUG(Service_LDR, "called, crs_buffer_ptr=0x{:08X}, crs_address=0x{:08X}, crs_size=0x{:X}",
               crs_buffer_ptr, crs_address, crs_size);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
@@ -117,7 +117,7 @@ void RO::Initialize(Kernel::HLERequestContext& ctx) {
                      .MapMemoryBlock(crs_address, crs_mem, 0, crs_size, Kernel::MemoryState::Code)
                      .Code();
         if (result.IsError()) {
-            LOG_ERROR(Service_LDR, "Error mapping memory block %08X", result.raw);
+            LOG_ERROR(Service_LDR, "Error mapping memory block {:08X}", result.raw);
             rb.Push(result);
             return;
         }
@@ -125,7 +125,7 @@ void RO::Initialize(Kernel::HLERequestContext& ctx) {
         result =
             process->vm_manager.ReprotectRange(crs_address, crs_size, Kernel::VMAPermission::Read);
         if (result.IsError()) {
-            LOG_ERROR(Service_LDR, "Error reprotecting memory block %08X", result.raw);
+            LOG_ERROR(Service_LDR, "Error reprotecting memory block {:08X}", result.raw);
             rb.Push(result);
             return;
         }
@@ -136,7 +136,7 @@ void RO::Initialize(Kernel::HLERequestContext& ctx) {
         // TODO(wwylele): verify this behaviour. This is only seen in the web browser app,
         //     and the actual behaviour is unclear. "Do nothing" is probably an incorrect implement.
         //     There is also a chance that another issue causes the app passing wrong arguments.
-        LOG_WARNING(Service_LDR, "crs_buffer_ptr == crs_address (0x%08X)", crs_address);
+        LOG_WARNING(Service_LDR, "crs_buffer_ptr == crs_address (0x{:08X})", crs_address);
     }
 
     CROHelper crs(crs_address);
@@ -144,7 +144,7 @@ void RO::Initialize(Kernel::HLERequestContext& ctx) {
 
     result = crs.Rebase(0, crs_size, 0, 0, 0, 0, true);
     if (result.IsError()) {
-        LOG_ERROR(Service_LDR, "Error rebasing CRS 0x%08X", result.raw);
+        LOG_ERROR(Service_LDR, "Error rebasing CRS 0x{:08X}", result.raw);
         rb.Push(result);
         return;
     }
@@ -165,7 +165,7 @@ void RO::LoadCRR(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
 
-    LOG_WARNING(Service_LDR, "(STUBBED) called, crr_buffer_ptr=0x%08X, crr_size=0x%08X",
+    LOG_WARNING(Service_LDR, "(STUBBED) called, crr_buffer_ptr=0x{:08X}, crr_size=0x{:08X}",
                 crr_buffer_ptr, crr_size);
 }
 
@@ -177,7 +177,7 @@ void RO::UnloadCRR(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
 
-    LOG_WARNING(Service_LDR, "(STUBBED) called, crr_buffer_ptr=0x%08X", crr_buffer_ptr);
+    LOG_WARNING(Service_LDR, "(STUBBED) called, crr_buffer_ptr=0x{:08X}", crr_buffer_ptr);
 }
 
 void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
@@ -196,10 +196,10 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
     auto process = rp.PopObject<Kernel::Process>();
 
     LOG_DEBUG(Service_LDR,
-              "called (%s), cro_buffer_ptr=0x%08X, cro_address=0x%08X, cro_size=0x%X, "
-              "data_segment_address=0x%08X, zero=%d, data_segment_size=0x%X, "
-              "bss_segment_address=0x%08X, bss_segment_size=0x%X, auto_link=%s, "
-              "fix_level=%d, crr_address=0x%08X",
+              "called ({}), cro_buffer_ptr=0x{:08X}, cro_address=0x{:08X}, cro_size=0x{:X}, "
+              "data_segment_address=0x{:08X}, zero={}, data_segment_size=0x{:X}, "
+              "bss_segment_address=0x{:08X}, bss_segment_size=0x{:X}, auto_link={}, "
+              "fix_level={}, crr_address=0x{:08X}",
               link_on_load_bug_fix ? "new" : "old", cro_buffer_ptr, cro_address, cro_size,
               data_segment_address, zero, data_segment_size, bss_segment_address, bss_segment_size,
               auto_link ? "true" : "false", fix_level, crr_address);
@@ -258,7 +258,7 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
     }
 
     if (zero) {
-        LOG_ERROR(Service_LDR, "Zero is not zero %d", zero);
+        LOG_ERROR(Service_LDR, "Zero is not zero {}", zero);
         rb.Push(ResultCode(static_cast<ErrorDescription>(29), ErrorModule::RO,
                            ErrorSummary::Internal, ErrorLevel::Usage));
         rb.Push<u32>(0);
@@ -275,7 +275,7 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
                      .MapMemoryBlock(cro_address, cro_mem, 0, cro_size, Kernel::MemoryState::Code)
                      .Code();
         if (result.IsError()) {
-            LOG_ERROR(Service_LDR, "Error mapping memory block %08X", result.raw);
+            LOG_ERROR(Service_LDR, "Error mapping memory block {:08X}", result.raw);
             rb.Push(result);
             rb.Push<u32>(0);
             return;
@@ -284,7 +284,7 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
         result =
             process->vm_manager.ReprotectRange(cro_address, cro_size, Kernel::VMAPermission::Read);
         if (result.IsError()) {
-            LOG_ERROR(Service_LDR, "Error reprotecting memory block %08X", result.raw);
+            LOG_ERROR(Service_LDR, "Error reprotecting memory block {:08X}", result.raw);
             process->vm_manager.UnmapRange(cro_address, cro_size);
             rb.Push(result);
             rb.Push<u32>(0);
@@ -298,14 +298,14 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
         //     This is derived from the case of LoadCRS with buffer_ptr==address,
         //     and is never seen in any game. "Do nothing" is probably an incorrect implement.
         //     There is also a chance that this case is just prohibited.
-        LOG_WARNING(Service_LDR, "cro_buffer_ptr == cro_address (0x%08X)", cro_address);
+        LOG_WARNING(Service_LDR, "cro_buffer_ptr == cro_address (0x{:08X})", cro_address);
     }
 
     CROHelper cro(cro_address);
 
     result = cro.VerifyHash(cro_size, crr_address);
     if (result.IsError()) {
-        LOG_ERROR(Service_LDR, "Error verifying CRO in CRR %08X", result.raw);
+        LOG_ERROR(Service_LDR, "Error verifying CRO in CRR {:08X}", result.raw);
         process->vm_manager.UnmapRange(cro_address, cro_size);
         rb.Push(result);
         rb.Push<u32>(0);
@@ -315,7 +315,7 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
     result = cro.Rebase(slot->loaded_crs, cro_size, data_segment_address, data_segment_size,
                         bss_segment_address, bss_segment_size, false);
     if (result.IsError()) {
-        LOG_ERROR(Service_LDR, "Error rebasing CRO %08X", result.raw);
+        LOG_ERROR(Service_LDR, "Error rebasing CRO {:08X}", result.raw);
         process->vm_manager.UnmapRange(cro_address, cro_size);
         rb.Push(result);
         rb.Push<u32>(0);
@@ -324,7 +324,7 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
 
     result = cro.Link(slot->loaded_crs, link_on_load_bug_fix);
     if (result.IsError()) {
-        LOG_ERROR(Service_LDR, "Error linking CRO %08X", result.raw);
+        LOG_ERROR(Service_LDR, "Error linking CRO {:08X}", result.raw);
         process->vm_manager.UnmapRange(cro_address, cro_size);
         rb.Push(result);
         rb.Push<u32>(0);
@@ -342,7 +342,7 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
         if (fix_size != cro_size) {
             result = process->vm_manager.UnmapRange(cro_address + fix_size, cro_size - fix_size);
             if (result.IsError()) {
-                LOG_ERROR(Service_LDR, "Error unmapping memory block %08X", result.raw);
+                LOG_ERROR(Service_LDR, "Error unmapping memory block {:08X}", result.raw);
                 process->vm_manager.UnmapRange(cro_address, cro_size);
                 rb.Push(result);
                 rb.Push<u32>(0);
@@ -361,7 +361,7 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
         result = process->vm_manager.ReprotectRange(exe_begin, exe_size,
                                                     Kernel::VMAPermission::ReadExecute);
         if (result.IsError()) {
-            LOG_ERROR(Service_LDR, "Error reprotecting memory block %08X", result.raw);
+            LOG_ERROR(Service_LDR, "Error reprotecting memory block {:08X}", result.raw);
             process->vm_manager.UnmapRange(cro_address, fix_size);
             rb.Push(result);
             rb.Push<u32>(0);
@@ -371,7 +371,7 @@ void RO::LoadCRO(Kernel::HLERequestContext& ctx, bool link_on_load_bug_fix) {
 
     Core::CPU().InvalidateCacheRange(cro_address, cro_size);
 
-    LOG_INFO(Service_LDR, "CRO \"%s\" loaded at 0x%08X, fixed_end=0x%08X", cro.ModuleName().data(),
+    LOG_INFO(Service_LDR, "CRO \"{}\" loaded at 0x{:08X}, fixed_end=0x{:08X}", cro.ModuleName(),
              cro_address, cro_address + fix_size);
 
     rb.Push(RESULT_SUCCESS, fix_size);
@@ -384,7 +384,7 @@ void RO::UnloadCRO(Kernel::HLERequestContext& ctx) {
     VAddr cro_buffer_ptr = rp.Pop<u32>();
     auto process = rp.PopObject<Kernel::Process>();
 
-    LOG_DEBUG(Service_LDR, "called, cro_address=0x%08X, zero=%d, cro_buffer_ptr=0x%08X",
+    LOG_DEBUG(Service_LDR, "called, cro_address=0x{:08X}, zero={}, cro_buffer_ptr=0x{:08X}",
               cro_address, zero, cro_buffer_ptr);
 
     CROHelper cro(cro_address);
@@ -410,7 +410,7 @@ void RO::UnloadCRO(Kernel::HLERequestContext& ctx) {
         return;
     }
 
-    LOG_INFO(Service_LDR, "Unloading CRO \"%s\"", cro.ModuleName().data());
+    LOG_INFO(Service_LDR, "Unloading CRO \"{}\"", cro.ModuleName());
 
     u32 fixed_size = cro.GetFixedSize();
 
@@ -418,7 +418,7 @@ void RO::UnloadCRO(Kernel::HLERequestContext& ctx) {
 
     ResultCode result = cro.Unlink(slot->loaded_crs);
     if (result.IsError()) {
-        LOG_ERROR(Service_LDR, "Error unlinking CRO %08X", result.raw);
+        LOG_ERROR(Service_LDR, "Error unlinking CRO {:08X}", result.raw);
         rb.Push(result);
         return;
     }
@@ -428,7 +428,7 @@ void RO::UnloadCRO(Kernel::HLERequestContext& ctx) {
     if (!cro.IsFixed()) {
         result = cro.ClearRelocations();
         if (result.IsError()) {
-            LOG_ERROR(Service_LDR, "Error clearing relocations %08X", result.raw);
+            LOG_ERROR(Service_LDR, "Error clearing relocations {:08X}", result.raw);
             rb.Push(result);
             return;
         }
@@ -442,7 +442,7 @@ void RO::UnloadCRO(Kernel::HLERequestContext& ctx) {
     if (cro_address != cro_buffer_ptr) {
         result = process->vm_manager.UnmapRange(cro_address, fixed_size);
         if (result.IsError()) {
-            LOG_ERROR(Service_LDR, "Error unmapping CRO %08X", result.raw);
+            LOG_ERROR(Service_LDR, "Error unmapping CRO {:08X}", result.raw);
         }
         slot->memory_synchronizer.RemoveMemoryBlock(cro_address, cro_buffer_ptr);
     }
@@ -457,7 +457,7 @@ void RO::LinkCRO(Kernel::HLERequestContext& ctx) {
     VAddr cro_address = rp.Pop<u32>();
     auto process = rp.PopObject<Kernel::Process>();
 
-    LOG_DEBUG(Service_LDR, "called, cro_address=0x%08X", cro_address);
+    LOG_DEBUG(Service_LDR, "called, cro_address=0x{:08X}", cro_address);
 
     CROHelper cro(cro_address);
 
@@ -482,11 +482,11 @@ void RO::LinkCRO(Kernel::HLERequestContext& ctx) {
         return;
     }
 
-    LOG_INFO(Service_LDR, "Linking CRO \"%s\"", cro.ModuleName().data());
+    LOG_INFO(Service_LDR, "Linking CRO \"{}\"", cro.ModuleName());
 
     ResultCode result = cro.Link(slot->loaded_crs, false);
     if (result.IsError()) {
-        LOG_ERROR(Service_LDR, "Error linking CRO %08X", result.raw);
+        LOG_ERROR(Service_LDR, "Error linking CRO {:08X}", result.raw);
     }
 
     slot->memory_synchronizer.SynchronizeOriginalMemory(*process);
@@ -499,7 +499,7 @@ void RO::UnlinkCRO(Kernel::HLERequestContext& ctx) {
     VAddr cro_address = rp.Pop<u32>();
     auto process = rp.PopObject<Kernel::Process>();
 
-    LOG_DEBUG(Service_LDR, "called, cro_address=0x%08X", cro_address);
+    LOG_DEBUG(Service_LDR, "called, cro_address=0x{:08X}", cro_address);
 
     CROHelper cro(cro_address);
 
@@ -524,11 +524,11 @@ void RO::UnlinkCRO(Kernel::HLERequestContext& ctx) {
         return;
     }
 
-    LOG_INFO(Service_LDR, "Unlinking CRO \"%s\"", cro.ModuleName().data());
+    LOG_INFO(Service_LDR, "Unlinking CRO \"{}\"", cro.ModuleName());
 
     ResultCode result = cro.Unlink(slot->loaded_crs);
     if (result.IsError()) {
-        LOG_ERROR(Service_LDR, "Error unlinking CRO %08X", result.raw);
+        LOG_ERROR(Service_LDR, "Error unlinking CRO {:08X}", result.raw);
     }
 
     slot->memory_synchronizer.SynchronizeOriginalMemory(*process);
@@ -541,7 +541,7 @@ void RO::Shutdown(Kernel::HLERequestContext& ctx) {
     VAddr crs_buffer_ptr = rp.Pop<u32>();
     auto process = rp.PopObject<Kernel::Process>();
 
-    LOG_DEBUG(Service_LDR, "called, crs_buffer_ptr=0x%08X", crs_buffer_ptr);
+    LOG_DEBUG(Service_LDR, "called, crs_buffer_ptr=0x{:08X}", crs_buffer_ptr);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
 
@@ -563,7 +563,7 @@ void RO::Shutdown(Kernel::HLERequestContext& ctx) {
     if (slot->loaded_crs != crs_buffer_ptr) {
         result = process->vm_manager.UnmapRange(slot->loaded_crs, crs.GetFileSize());
         if (result.IsError()) {
-            LOG_ERROR(Service_LDR, "Error unmapping CRS %08X", result.raw);
+            LOG_ERROR(Service_LDR, "Error unmapping CRS {:08X}", result.raw);
         }
         slot->memory_synchronizer.RemoveMemoryBlock(slot->loaded_crs, crs_buffer_ptr);
     }

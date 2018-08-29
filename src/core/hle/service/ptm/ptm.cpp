@@ -77,7 +77,6 @@ void Module::Interface::GetStepHistory(Kernel::HLERequestContext& ctx) {
 
     u32 hours = rp.Pop<u32>();
     u64 start_time = rp.Pop<u64>();
-    size_t steps_buff_size;
     auto& buffer = rp.PopMappedBuffer();
     ASSERT_MSG(sizeof(u16) * hours == buffer.GetSize(),
                "Buffer for steps count has incorrect size");
@@ -92,8 +91,8 @@ void Module::Interface::GetStepHistory(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
     rb.PushMappedBuffer(buffer);
 
-    LOG_WARNING(Service_PTM, "(STUBBED) called, from time(raw): 0x%" PRIx64 ", for %u hours",
-                start_time, hours);
+    LOG_WARNING(Service_PTM, "(STUBBED) called, from time(raw): 0x{:x}, for {} hours", start_time,
+                hours);
 }
 
 void Module::Interface::GetTotalStepCount(Kernel::HLERequestContext& ctx) {
@@ -127,7 +126,7 @@ void CheckNew3DS(IPC::RequestBuilder& rb) {
     rb.Push(RESULT_SUCCESS);
     rb.Push(is_new_3ds);
 
-    LOG_WARNING(Service_PTM, "(STUBBED) called isNew3DS = 0x%08x", static_cast<u32>(is_new_3ds));
+    LOG_WARNING(Service_PTM, "(STUBBED) called isNew3DS = 0x{:08x}", static_cast<u32>(is_new_3ds));
 }
 
 void Module::Interface::CheckNew3DS(Kernel::HLERequestContext& ctx) {

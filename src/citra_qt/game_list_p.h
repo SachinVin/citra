@@ -7,18 +7,32 @@
 #include <atomic>
 #include <map>
 #include <unordered_map>
+#include <utility>
 #include <QCoreApplication>
+#include <QFileInfo>
 #include <QImage>
 #include <QObject>
 #include <QPainter>
 #include <QRunnable>
 #include <QStandardItem>
 #include <QString>
+#include <QWidget>
+#include "citra_qt/ui_settings.h"
 #include "citra_qt/util/util.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/string_util.h"
 #include "core/loader/smdh.h"
+
+enum class GameListItemType {
+    Game = QStandardItem::UserType + 1,
+    CustomDir = QStandardItem::UserType + 2,
+    InstalledDir = QStandardItem::UserType + 3,
+    SystemDir = QStandardItem::UserType + 4,
+    AddDir = QStandardItem::UserType + 5
+};
+
+Q_DECLARE_METATYPE(GameListItemType);
 
 /**
  * Gets the game icon from SMDH data.
@@ -126,9 +140,13 @@ const static inline std::map<QString, CompatStatus> status_data = {
 
 class GameListItem : public QStandardItem {
 public:
-    GameListItem() : QStandardItem() {}
-    GameListItem(const QString& string) : QStandardItem(string) {}
-    virtual ~GameListItem() override {}
+    // used to access type from item index
+    static const int TypeRole = Qt::UserRole + 1;
+    static const int SortRole = Qt::UserRole + 2;
+    GameListItem() = default;
+    explicit GameListItem(const QString& string) : QStandardItem(string) {
+        setData(string, SortRole);
+    }
 };
 
 /**
@@ -139,13 +157,13 @@ public:
  */
 class GameListItemPath : public GameListItem {
 public:
-    static const int FullPathRole = Qt::UserRole + 1;
-    static const int TitleRole = Qt::UserRole + 2;
-    static const int ProgramIdRole = Qt::UserRole + 3;
+    static const int TitleRole = SortRole;
+    static const int FullPathRole = SortRole + 1;
+    static const int ProgramIdRole = SortRole + 2;
 
-    GameListItemPath() : GameListItem() {}
-    GameListItemPath(const QString& game_path, const std::vector<u8>& smdh_data, u64 program_id)
-        : GameListItem() {
+    GameListItemPath() = default;
+    GameListItemPath(const QString& game_path, const std::vector<u8>& smdh_data, u64 program_id) {
+        setData(type(), TypeRole);
         setData(game_path, FullPathRole);
         setData(qulonglong(program_id), ProgramIdRole);
 
@@ -164,6 +182,10 @@ public:
         // Get title from SMDH
         setData(GetQStringShortTitleFromSMDH(smdh, Loader::SMDH::TitleLanguage::English),
                 TitleRole);
+    }
+
+    int type() const override {
+        return static_cast<int>(GameListItemType::Game);
     }
 
     QVariant data(int role) const override {
@@ -202,12 +224,15 @@ public:
 
 class GameListItemCompat : public GameListItem {
 public:
-    static const int CompatNumberRole = Qt::UserRole + 1;
+    static const int CompatNumberRole = SortRole;
+
     GameListItemCompat() = default;
     explicit GameListItemCompat(const QString compatiblity) {
+        setData(type(), TypeRole);
+
         auto iterator = status_data.find(compatiblity);
         if (iterator == status_data.end()) {
-            NGLOG_WARNING(Frontend, "Invalid compatibility number {}", compatiblity.toStdString());
+            LOG_WARNING(Frontend, "Invalid compatibility number {}", compatiblity.toStdString());
             return;
         }
         CompatStatus status = iterator->second;
@@ -215,6 +240,10 @@ public:
         setText(QCoreApplication::translate("GameList", status.text));
         setToolTip(QCoreApplication::translate("GameList", status.tooltip));
         setData(CreateCirclePixmapFromColor(status.color), Qt::DecorationRole);
+    }
+
+    int type() const override {
+        return static_cast<int>(GameListItemType::Game);
     }
 
     bool operator<(const QStandardItem& other) const override {
@@ -226,6 +255,8 @@ class GameListItemRegion : public GameListItem {
 public:
     GameListItemRegion() = default;
     explicit GameListItemRegion(const std::vector<u8>& smdh_data) {
+        setData(type(), TypeRole);
+
         if (!Loader::IsValidSMDH(smdh_data)) {
             setText(QObject::tr("Invalid region"));
             return;
@@ -235,6 +266,11 @@ public:
         memcpy(&smdh, smdh_data.data(), sizeof(Loader::SMDH));
 
         setText(GetRegionFromSMDH(smdh));
+        setData(GetRegionFromSMDH(smdh), SortRole);
+    }
+
+    int type() const override {
+        return static_cast<int>(GameListItemType::Game);
     }
 };
 
@@ -245,10 +281,11 @@ public:
  */
 class GameListItemSize : public GameListItem {
 public:
-    static const int SizeRole = Qt::UserRole + 1;
+    static const int SizeRole = SortRole;
 
-    GameListItemSize() : GameListItem() {}
-    GameListItemSize(const qulonglong size_bytes) : GameListItem() {
+    GameListItemSize() = default;
+    explicit GameListItemSize(const qulonglong size_bytes) {
+        setData(type(), TypeRole);
         setData(size_bytes, SizeRole);
     }
 
@@ -264,6 +301,10 @@ public:
         }
     }
 
+    int type() const override {
+        return static_cast<int>(GameListItemType::Game);
+    }
+
     /**
      * This operator is, in practice, only used by the TreeView sorting systems.
      * Override it so that it will correctly sort by numerical value instead of by string
@@ -271,6 +312,55 @@ public:
      */
     bool operator<(const QStandardItem& other) const override {
         return data(SizeRole).toULongLong() < other.data(SizeRole).toULongLong();
+    }
+};
+
+class GameListDir : public GameListItem {
+public:
+    static const int GameDirRole = Qt::UserRole + 2;
+
+    explicit GameListDir(UISettings::GameDir& directory,
+                         GameListItemType dir_type = GameListItemType::CustomDir)
+        : dir_type{dir_type} {
+        setData(type(), TypeRole);
+
+        UISettings::GameDir* game_dir = &directory;
+        setData(QVariant::fromValue(game_dir), GameDirRole);
+        switch (dir_type) {
+        case GameListItemType::InstalledDir:
+            setData(QIcon::fromTheme("sd_card").pixmap(48), Qt::DecorationRole);
+            setData("Installed Titles", Qt::DisplayRole);
+            break;
+        case GameListItemType::SystemDir:
+            setData(QIcon::fromTheme("chip").pixmap(48), Qt::DecorationRole);
+            setData("System Titles", Qt::DisplayRole);
+            break;
+        case GameListItemType::CustomDir:
+            QString icon_name = QFileInfo::exists(game_dir->path) ? "folder" : "bad_folder";
+            setData(QIcon::fromTheme(icon_name).pixmap(48), Qt::DecorationRole);
+            setData(game_dir->path, Qt::DisplayRole);
+            break;
+        };
+    };
+
+    int type() const override {
+        return static_cast<int>(dir_type);
+    }
+
+private:
+    GameListItemType dir_type;
+};
+
+class GameListAddDir : public GameListItem {
+public:
+    explicit GameListAddDir() {
+        setData(type(), TypeRole);
+        setData(QIcon::fromTheme("plus").pixmap(48), Qt::DecorationRole);
+        setData("Add New Game Directory", Qt::DisplayRole);
+    }
+
+    int type() const override {
+        return static_cast<int>(GameListItemType::AddDir);
     }
 };
 
@@ -282,11 +372,10 @@ class GameListWorker : public QObject, public QRunnable {
     Q_OBJECT
 
 public:
-    GameListWorker(
-        QString dir_path, bool deep_scan,
+    explicit GameListWorker(
+        QList<UISettings::GameDir>& game_dirs,
         const std::unordered_map<std::string, std::pair<QString, QString>>& compatibility_list)
-        : QObject(), QRunnable(), dir_path(dir_path), deep_scan(deep_scan),
-          compatibility_list(compatibility_list) {}
+        : game_dirs(game_dirs), compatibility_list(compatibility_list) {}
 
 public slots:
     /// Starts the processing of directory tree information.
@@ -298,22 +387,66 @@ signals:
     /**
      * The `EntryReady` signal is emitted once an entry has been prepared and is ready
      * to be added to the game list.
-     * @param entry_items a list with `QStandardItem`s that make up the columns of the new entry.
+     * @param entry_items a list with `QStandardItem`s that make up the columns of the new
+     * entry.
      */
-    void EntryReady(QList<QStandardItem*> entry_items);
+    void DirEntryReady(GameListDir* entry_items);
+    void EntryReady(QList<QStandardItem*> entry_items, GameListDir* parent_dir);
 
     /**
-     * After the worker has traversed the game directory looking for entries, this signal is emmited
-     * with a list of folders that should be watched for changes as well.
+     * After the worker has traversed the game directory looking for entries, this signal is
+     * emitted with a list of folders that should be watched for changes as well.
      */
     void Finished(QStringList watch_list);
 
 private:
     QStringList watch_list;
-    QString dir_path;
-    bool deep_scan;
     const std::unordered_map<std::string, std::pair<QString, QString>>& compatibility_list;
+    QList<UISettings::GameDir>& game_dirs;
     std::atomic_bool stop_processing;
 
-    void AddFstEntriesToGameList(const std::string& dir_path, unsigned int recursion = 0);
+    void AddFstEntriesToGameList(const std::string& dir_path, unsigned int recursion,
+                                 GameListDir* parent_dir);
+};
+
+class GameList;
+class QHBoxLayout;
+class QTreeView;
+class QLabel;
+class QLineEdit;
+class QToolButton;
+
+class GameListSearchField : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit GameListSearchField(GameList* parent = nullptr);
+
+    void setFilterResult(int visible, int total);
+
+    void clear();
+    void setFocus();
+
+    int visible;
+    int total;
+
+private:
+    class KeyReleaseEater : public QObject {
+    public:
+        explicit KeyReleaseEater(GameList* gamelist);
+
+    private:
+        GameList* gamelist = nullptr;
+        QString edit_filter_text_old;
+
+    protected:
+        // EventFilter in order to process systemkeys while editing the searchfield
+        bool eventFilter(QObject* obj, QEvent* event) override;
+    };
+    QHBoxLayout* layout_filter = nullptr;
+    QTreeView* tree_view = nullptr;
+    QLabel* label_filter = nullptr;
+    QLineEdit* edit_filter = nullptr;
+    QLabel* label_filter_result = nullptr;
+    QToolButton* button_filter_close = nullptr;
 };

@@ -13,7 +13,9 @@
 #include "common/common_types.h"
 #include "common/logging/log.h"
 #include "core/core_timing.h"
-#include "core/hle/service/dsp_dsp.h"
+
+using InterruptType = Service::DSP::DSP_DSP::InterruptType;
+using Service::DSP::DSP_DSP;
 
 namespace AudioCore {
 
@@ -32,6 +34,8 @@ public:
 
     std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory();
 
+    void SetServiceToInterrupt(std::weak_ptr<DSP_DSP> dsp);
+
 private:
     void ResetPipes();
     void WriteU16(DspPipe pipe_number, u16 value);
@@ -43,7 +47,7 @@ private:
 
     StereoFrame16 GenerateCurrentFrame();
     bool Tick();
-    void AudioTickCallback(int cycles_late);
+    void AudioTickCallback(s64 cycles_late);
 
     DspState dsp_state = DspState::Off;
     std::array<std::vector<u8>, num_dsp_pipe> pipe_data;
@@ -60,13 +64,15 @@ private:
 
     DspHle& parent;
     CoreTiming::EventType* tick_event;
+
+    std::weak_ptr<DSP_DSP> dsp_dsp;
 };
 
 DspHle::Impl::Impl(DspHle& parent_) : parent(parent_) {
     dsp_memory.raw_memory.fill(0);
 
     tick_event =
-        CoreTiming::RegisterEvent("AudioCore::DspHle::tick_event", [this](u64, int cycles_late) {
+        CoreTiming::RegisterEvent("AudioCore::DspHle::tick_event", [this](u64, s64 cycles_late) {
             this->AudioTickCallback(cycles_late);
         });
     CoreTiming::ScheduleEvent(audio_frame_ticks, tick_event);
@@ -84,19 +90,19 @@ std::vector<u8> DspHle::Impl::PipeRead(DspPipe pipe_number, u32 length) {
     const size_t pipe_index = static_cast<size_t>(pipe_number);
 
     if (pipe_index >= num_dsp_pipe) {
-        NGLOG_ERROR(Audio_DSP, "pipe_number = {} invalid", pipe_index);
+        LOG_ERROR(Audio_DSP, "pipe_number = {} invalid", pipe_index);
         return {};
     }
 
     if (length > UINT16_MAX) { // Can only read at most UINT16_MAX from the pipe
-        NGLOG_ERROR(Audio_DSP, "length of {} greater than max of {}", length, UINT16_MAX);
+        LOG_ERROR(Audio_DSP, "length of {} greater than max of {}", length, UINT16_MAX);
         return {};
     }
 
     std::vector<u8>& data = pipe_data[pipe_index];
 
     if (length > data.size()) {
-        NGLOG_WARNING(
+        LOG_WARNING(
             Audio_DSP,
             "pipe_number = {} is out of data, application requested read of {} but {} remain",
             pipe_index, length, data.size());
@@ -115,7 +121,7 @@ size_t DspHle::Impl::GetPipeReadableSize(DspPipe pipe_number) const {
     const size_t pipe_index = static_cast<size_t>(pipe_number);
 
     if (pipe_index >= num_dsp_pipe) {
-        NGLOG_ERROR(Audio_DSP, "pipe_number = {} invalid", pipe_index);
+        LOG_ERROR(Audio_DSP, "pipe_number = {} invalid", pipe_index);
         return 0;
     }
 
@@ -126,8 +132,8 @@ void DspHle::Impl::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer)
     switch (pipe_number) {
     case DspPipe::Audio: {
         if (buffer.size() != 4) {
-            NGLOG_ERROR(Audio_DSP, "DspPipe::Audio: Unexpected buffer length {} was written",
-                        buffer.size());
+            LOG_ERROR(Audio_DSP, "DspPipe::Audio: Unexpected buffer length {} was written",
+                      buffer.size());
             return;
         }
 
@@ -146,30 +152,30 @@ void DspHle::Impl::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer)
 
         switch (static_cast<StateChange>(buffer[0])) {
         case StateChange::Initialize:
-            NGLOG_INFO(Audio_DSP, "Application has requested initialization of DSP hardware");
+            LOG_INFO(Audio_DSP, "Application has requested initialization of DSP hardware");
             ResetPipes();
             AudioPipeWriteStructAddresses();
             dsp_state = DspState::On;
             break;
         case StateChange::Shutdown:
-            NGLOG_INFO(Audio_DSP, "Application has requested shutdown of DSP hardware");
+            LOG_INFO(Audio_DSP, "Application has requested shutdown of DSP hardware");
             dsp_state = DspState::Off;
             break;
         case StateChange::Wakeup:
-            NGLOG_INFO(Audio_DSP, "Application has requested wakeup of DSP hardware");
+            LOG_INFO(Audio_DSP, "Application has requested wakeup of DSP hardware");
             ResetPipes();
             AudioPipeWriteStructAddresses();
             dsp_state = DspState::On;
             break;
         case StateChange::Sleep:
-            NGLOG_INFO(Audio_DSP, "Application has requested sleep of DSP hardware");
+            LOG_INFO(Audio_DSP, "Application has requested sleep of DSP hardware");
             UNIMPLEMENTED();
             dsp_state = DspState::Sleeping;
             break;
         default:
-            NGLOG_ERROR(Audio_DSP,
-                        "Application has requested unknown state transition of DSP hardware {}",
-                        buffer[0]);
+            LOG_ERROR(Audio_DSP,
+                      "Application has requested unknown state transition of DSP hardware {}",
+                      buffer[0]);
             dsp_state = DspState::Off;
             break;
         }
@@ -177,8 +183,7 @@ void DspHle::Impl::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer)
         return;
     }
     default:
-        NGLOG_CRITICAL(Audio_DSP, "pipe_number = {} unimplemented",
-                       static_cast<size_t>(pipe_number));
+        LOG_CRITICAL(Audio_DSP, "pipe_number = {} unimplemented", static_cast<size_t>(pipe_number));
         UNIMPLEMENTED();
         return;
     }
@@ -186,6 +191,10 @@ void DspHle::Impl::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer)
 
 std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::Impl::GetDspMemory() {
     return dsp_memory.raw_memory;
+}
+
+void DspHle::Impl::SetServiceToInterrupt(std::weak_ptr<DSP_DSP> dsp) {
+    dsp_dsp = std::move(dsp);
 }
 
 void DspHle::Impl::ResetPipes() {
@@ -232,7 +241,9 @@ void DspHle::Impl::AudioPipeWriteStructAddresses() {
         WriteU16(DspPipe::Audio, addr);
     }
     // Signal that we have data on this pipe.
-    Service::DSP_DSP::SignalPipeInterrupt(DspPipe::Audio);
+    if (auto service = dsp_dsp.lock()) {
+        service->SignalInterrupt(InterruptType::Pipe, DspPipe::Audio);
+    }
 }
 
 size_t DspHle::Impl::CurrentRegionIndex() const {
@@ -305,12 +316,14 @@ bool DspHle::Impl::Tick() {
     return true;
 }
 
-void DspHle::Impl::AudioTickCallback(int cycles_late) {
+void DspHle::Impl::AudioTickCallback(s64 cycles_late) {
     if (Tick()) {
         // TODO(merry): Signal all the other interrupts as appropriate.
-        Service::DSP_DSP::SignalPipeInterrupt(DspPipe::Audio);
-        // HACK(merry): Added to prevent regressions. Will remove soon.
-        Service::DSP_DSP::SignalPipeInterrupt(DspPipe::Binary);
+        if (auto service = dsp_dsp.lock()) {
+            service->SignalInterrupt(InterruptType::Pipe, DspPipe::Audio);
+            // HACK(merry): Added to prevent regressions. Will remove soon.
+            service->SignalInterrupt(InterruptType::Pipe, DspPipe::Binary);
+        }
     }
 
     // Reschedule recurrent event
@@ -338,6 +351,10 @@ void DspHle::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer) {
 
 std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::GetDspMemory() {
     return impl->GetDspMemory();
+}
+
+void DspHle::SetServiceToInterrupt(std::weak_ptr<DSP_DSP> dsp) {
+    impl->SetServiceToInterrupt(std::move(dsp));
 }
 
 } // namespace AudioCore

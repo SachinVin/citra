@@ -118,17 +118,18 @@ struct CTMHeader {
 static_assert(sizeof(CTMHeader) == 256, "CTMHeader should be 256 bytes");
 #pragma pack(pop)
 
-bool Movie::IsPlayingInput() {
+bool Movie::IsPlayingInput() const {
     return play_mode == PlayMode::Playing;
 }
-bool Movie::IsRecordingInput() {
+bool Movie::IsRecordingInput() const {
     return play_mode == PlayMode::Recording;
 }
 
 void Movie::CheckInputEnd() {
     if (current_byte + sizeof(ControllerState) > recorded_input.size()) {
-        NGLOG_INFO(Movie, "Playback finished");
+        LOG_INFO(Movie, "Playback finished");
         play_mode = PlayMode::None;
+        playback_completion_callback();
     }
 }
 
@@ -138,9 +139,9 @@ void Movie::Play(Service::HID::PadState& pad_state, s16& circle_pad_x, s16& circ
     current_byte += sizeof(ControllerState);
 
     if (s.type != ControllerStateType::PadAndCircle) {
-        NGLOG_ERROR(Movie,
-                    "Expected to read type {}, but found {}. Your playback will be out of sync",
-                    static_cast<int>(ControllerStateType::PadAndCircle), static_cast<int>(s.type));
+        LOG_ERROR(Movie,
+                  "Expected to read type {}, but found {}. Your playback will be out of sync",
+                  static_cast<int>(ControllerStateType::PadAndCircle), static_cast<int>(s.type));
         return;
     }
 
@@ -167,9 +168,9 @@ void Movie::Play(Service::HID::TouchDataEntry& touch_data) {
     current_byte += sizeof(ControllerState);
 
     if (s.type != ControllerStateType::Touch) {
-        NGLOG_ERROR(Movie,
-                    "Expected to read type {}, but found {}. Your playback will be out of sync",
-                    static_cast<int>(ControllerStateType::Touch), static_cast<int>(s.type));
+        LOG_ERROR(Movie,
+                  "Expected to read type {}, but found {}. Your playback will be out of sync",
+                  static_cast<int>(ControllerStateType::Touch), static_cast<int>(s.type));
         return;
     }
 
@@ -184,9 +185,9 @@ void Movie::Play(Service::HID::AccelerometerDataEntry& accelerometer_data) {
     current_byte += sizeof(ControllerState);
 
     if (s.type != ControllerStateType::Accelerometer) {
-        NGLOG_ERROR(Movie,
-                    "Expected to read type {}, but found {}. Your playback will be out of sync",
-                    static_cast<int>(ControllerStateType::Accelerometer), static_cast<int>(s.type));
+        LOG_ERROR(Movie,
+                  "Expected to read type {}, but found {}. Your playback will be out of sync",
+                  static_cast<int>(ControllerStateType::Accelerometer), static_cast<int>(s.type));
         return;
     }
 
@@ -201,9 +202,9 @@ void Movie::Play(Service::HID::GyroscopeDataEntry& gyroscope_data) {
     current_byte += sizeof(ControllerState);
 
     if (s.type != ControllerStateType::Gyroscope) {
-        NGLOG_ERROR(Movie,
-                    "Expected to read type {}, but found {}. Your playback will be out of sync",
-                    static_cast<int>(ControllerStateType::Gyroscope), static_cast<int>(s.type));
+        LOG_ERROR(Movie,
+                  "Expected to read type {}, but found {}. Your playback will be out of sync",
+                  static_cast<int>(ControllerStateType::Gyroscope), static_cast<int>(s.type));
         return;
     }
 
@@ -218,9 +219,9 @@ void Movie::Play(Service::IR::PadState& pad_state, s16& c_stick_x, s16& c_stick_
     current_byte += sizeof(ControllerState);
 
     if (s.type != ControllerStateType::IrRst) {
-        NGLOG_ERROR(Movie,
-                    "Expected to read type {}, but found {}. Your playback will be out of sync",
-                    static_cast<int>(ControllerStateType::IrRst), static_cast<int>(s.type));
+        LOG_ERROR(Movie,
+                  "Expected to read type {}, but found {}. Your playback will be out of sync",
+                  static_cast<int>(ControllerStateType::IrRst), static_cast<int>(s.type));
         return;
     }
 
@@ -236,18 +237,21 @@ void Movie::Play(Service::IR::ExtraHIDResponse& extra_hid_response) {
     current_byte += sizeof(ControllerState);
 
     if (s.type != ControllerStateType::ExtraHidResponse) {
-        NGLOG_ERROR(
+        LOG_ERROR(
             Movie, "Expected to read type {}, but found {}. Your playback will be out of sync",
             static_cast<int>(ControllerStateType::ExtraHidResponse), static_cast<int>(s.type));
         return;
     }
 
-    extra_hid_response.buttons.battery_level.Assign(s.extra_hid_response.battery_level);
+    extra_hid_response.buttons.battery_level.Assign(
+        static_cast<u8>(s.extra_hid_response.battery_level));
     extra_hid_response.c_stick.c_stick_x.Assign(s.extra_hid_response.c_stick_x);
     extra_hid_response.c_stick.c_stick_y.Assign(s.extra_hid_response.c_stick_y);
-    extra_hid_response.buttons.r_not_held.Assign(s.extra_hid_response.r_not_held);
-    extra_hid_response.buttons.zl_not_held.Assign(s.extra_hid_response.zl_not_held);
-    extra_hid_response.buttons.zr_not_held.Assign(s.extra_hid_response.zr_not_held);
+    extra_hid_response.buttons.r_not_held.Assign(static_cast<u8>(s.extra_hid_response.r_not_held));
+    extra_hid_response.buttons.zl_not_held.Assign(
+        static_cast<u8>(s.extra_hid_response.zl_not_held));
+    extra_hid_response.buttons.zr_not_held.Assign(
+        static_cast<u8>(s.extra_hid_response.zr_not_held));
 }
 
 void Movie::Record(const ControllerState& controller_state) {
@@ -340,36 +344,38 @@ void Movie::Record(const Service::IR::ExtraHIDResponse& extra_hid_response) {
     Record(s);
 }
 
-bool Movie::ValidateHeader(const CTMHeader& header) {
+Movie::ValidationResult Movie::ValidateHeader(const CTMHeader& header, u64 program_id) const {
     if (header_magic_bytes != header.filetype) {
-        NGLOG_ERROR(Movie, "Playback file does not have valid header");
-        return false;
+        LOG_ERROR(Movie, "Playback file does not have valid header");
+        return ValidationResult::Invalid;
     }
 
     std::string revision =
         Common::ArrayToString(header.revision.data(), header.revision.size(), 21, false);
     revision = Common::ToLower(revision);
 
-    if (revision != Common::g_scm_rev) {
-        NGLOG_WARNING(
-            Movie, "This movie was created on a different version of Citra, playback may desync");
-    }
-
-    u64 program_id;
-    Core::System::GetInstance().GetAppLoader().ReadProgramId(program_id);
+    if (!program_id)
+        Core::System::GetInstance().GetAppLoader().ReadProgramId(program_id);
     if (program_id != header.program_id) {
-        NGLOG_WARNING(Movie, "This movie was recorded using a ROM with a different program id");
+        LOG_WARNING(Movie, "This movie was recorded using a ROM with a different program id");
+        return ValidationResult::GameDismatch;
     }
 
-    return true;
+    if (revision != Common::g_scm_rev) {
+        LOG_WARNING(Movie,
+                    "This movie was created on a different version of Citra, playback may desync");
+        return ValidationResult::RevisionDismatch;
+    }
+
+    return ValidationResult::OK;
 }
 
 void Movie::SaveMovie() {
-    NGLOG_INFO(Movie, "Saving movie");
-    FileUtil::IOFile save_record(Settings::values.movie_record, "wb");
+    LOG_INFO(Movie, "Saving recorded movie to '{}'", record_movie_file);
+    FileUtil::IOFile save_record(record_movie_file, "wb");
 
     if (!save_record.IsGood()) {
-        NGLOG_ERROR(Movie, "Unable to open file to save movie");
+        LOG_ERROR(Movie, "Unable to open file to save movie");
         return;
     }
 
@@ -387,35 +393,67 @@ void Movie::SaveMovie() {
     save_record.WriteBytes(recorded_input.data(), recorded_input.size());
 
     if (!save_record.IsGood()) {
-        NGLOG_ERROR(Movie, "Error saving movie");
+        LOG_ERROR(Movie, "Error saving movie");
     }
 }
 
-void Movie::Init() {
-    if (!Settings::values.movie_play.empty()) {
-        NGLOG_INFO(Movie, "Loading Movie for playback");
-        FileUtil::IOFile save_record(Settings::values.movie_play, "rb");
-        u64 size = save_record.GetSize();
+void Movie::StartPlayback(const std::string& movie_file,
+                          std::function<void()> completion_callback) {
+    LOG_INFO(Movie, "Loading Movie for playback");
+    FileUtil::IOFile save_record(movie_file, "rb");
+    const u64 size = save_record.GetSize();
 
-        if (save_record.IsGood() && size > sizeof(CTMHeader)) {
-            CTMHeader header;
-            save_record.ReadArray(&header, 1);
-            if (ValidateHeader(header)) {
-                play_mode = PlayMode::Playing;
-                recorded_input.resize(size - sizeof(CTMHeader));
-                save_record.ReadArray(recorded_input.data(), recorded_input.size());
-                current_byte = 0;
-            }
-        } else {
-            NGLOG_ERROR(Movie, "Failed to playback movie: Unable to open '{}'",
-                        Settings::values.movie_play);
+    if (save_record.IsGood() && size > sizeof(CTMHeader)) {
+        CTMHeader header;
+        save_record.ReadArray(&header, 1);
+        if (ValidateHeader(header) != ValidationResult::Invalid) {
+            play_mode = PlayMode::Playing;
+            recorded_input.resize(size - sizeof(CTMHeader));
+            save_record.ReadArray(recorded_input.data(), recorded_input.size());
+            current_byte = 0;
+            playback_completion_callback = completion_callback;
         }
+    } else {
+        LOG_ERROR(Movie, "Failed to playback movie: Unable to open '{}'", movie_file);
+    }
+}
+
+void Movie::StartRecording(const std::string& movie_file) {
+    LOG_INFO(Movie, "Enabling Movie recording");
+    play_mode = PlayMode::Recording;
+    record_movie_file = movie_file;
+}
+
+Movie::ValidationResult Movie::ValidateMovie(const std::string& movie_file, u64 program_id) const {
+    LOG_INFO(Movie, "Validating Movie file '{}'", movie_file);
+    FileUtil::IOFile save_record(movie_file, "rb");
+    const u64 size = save_record.GetSize();
+
+    if (!save_record || size <= sizeof(CTMHeader)) {
+        return ValidationResult::Invalid;
     }
 
-    if (!Settings::values.movie_record.empty()) {
-        NGLOG_INFO(Movie, "Enabling Movie recording");
-        play_mode = PlayMode::Recording;
+    CTMHeader header;
+    save_record.ReadArray(&header, 1);
+    return ValidateHeader(header, program_id);
+}
+
+u64 Movie::GetMovieProgramID(const std::string& movie_file) const {
+    FileUtil::IOFile save_record(movie_file, "rb");
+    const u64 size = save_record.GetSize();
+
+    if (!save_record || size <= sizeof(CTMHeader)) {
+        return 0;
     }
+
+    CTMHeader header;
+    save_record.ReadArray(&header, 1);
+
+    if (header_magic_bytes != header.filetype) {
+        return 0;
+    }
+
+    return static_cast<u64>(header.program_id);
 }
 
 void Movie::Shutdown() {
@@ -425,6 +463,7 @@ void Movie::Shutdown() {
 
     play_mode = PlayMode::None;
     recorded_input.resize(0);
+    record_movie_file.clear();
     current_byte = 0;
 }
 

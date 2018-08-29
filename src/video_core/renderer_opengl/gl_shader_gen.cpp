@@ -32,6 +32,7 @@ namespace GLShader {
 static const std::string UniformBlockDef = R"(
 #define NUM_TEV_STAGES 6
 #define NUM_LIGHTS 8
+#define NUM_LIGHTING_SAMPLERS 24
 
 struct LightSrc {
     vec3 specular_0;
@@ -49,10 +50,20 @@ layout (std140) uniform shader_data {
     int alphatest_ref;
     float depth_scale;
     float depth_offset;
+    float shadow_bias_constant;
+    float shadow_bias_linear;
     int scissor_x1;
     int scissor_y1;
     int scissor_x2;
     int scissor_y2;
+    int fog_lut_offset;
+    int proctex_noise_lut_offset;
+    int proctex_color_map_offset;
+    int proctex_alpha_map_offset;
+    int proctex_lut_offset;
+    int proctex_diff_lut_offset;
+    float proctex_bias;
+    ivec4 lighting_lut_offset[NUM_LIGHTING_SAMPLERS / 4];
     vec3 fog_color;
     vec2 proctex_noise_f;
     vec2 proctex_noise_a;
@@ -218,9 +229,20 @@ PicaFSConfig PicaFSConfig::BuildFromRegs(const Pica::Regs& regs) {
         state.proctex.u_shift = regs.texturing.proctex.u_shift;
         state.proctex.v_shift = regs.texturing.proctex.v_shift;
         state.proctex.lut_width = regs.texturing.proctex_lut.width;
-        state.proctex.lut_offset = regs.texturing.proctex_lut_offset;
+        state.proctex.lut_offset0 = regs.texturing.proctex_lut_offset.level0;
+        state.proctex.lut_offset1 = regs.texturing.proctex_lut_offset.level1;
+        state.proctex.lut_offset2 = regs.texturing.proctex_lut_offset.level2;
+        state.proctex.lut_offset3 = regs.texturing.proctex_lut_offset.level3;
+        state.proctex.lod_min = regs.texturing.proctex_lut.lod_min;
+        state.proctex.lod_max = regs.texturing.proctex_lut.lod_max;
         state.proctex.lut_filter = regs.texturing.proctex_lut.filter;
     }
+
+    state.shadow_rendering = regs.framebuffer.output_merger.fragment_operation_mode ==
+                             Pica::FramebufferRegs::FragmentOperationMode::Shadow;
+
+    state.shadow_texture_orthographic = regs.texturing.shadow.orthographic != 0;
+    state.shadow_texture_bias = regs.texturing.shadow.bias << 1;
 
     return res;
 }
@@ -255,8 +277,8 @@ void PicaGSConfigCommonRaw::Init(const Pica::Regs& regs) {
             if (static_cast<size_t>(semantic) < 24) {
                 semantic_maps[static_cast<size_t>(semantic)] = {attrib, comp};
             } else if (semantic != VSOutputAttributes::INVALID) {
-                NGLOG_ERROR(Render_OpenGL, "Invalid/unknown semantic id: {}",
-                            static_cast<u32>(semantic));
+                LOG_ERROR(Render_OpenGL, "Invalid/unknown semantic id: {}",
+                          static_cast<u32>(semantic));
             }
         }
     }
@@ -302,12 +324,13 @@ static std::string SampleTexture(const PicaFSConfig& config, unsigned texture_un
         case TexturingRegs::TextureConfig::TextureCube:
             return "texture(tex_cube, vec3(texcoord0, texcoord0_w))";
         case TexturingRegs::TextureConfig::Shadow2D:
+            return "shadowTexture(texcoord0, texcoord0_w)";
         case TexturingRegs::TextureConfig::ShadowCube:
-            NGLOG_CRITICAL(HW_GPU, "Unhandled shadow texture");
-            UNIMPLEMENTED();
-            return "vec4(1.0)"; // stubbed to avoid rendering with wrong shadow
+            return "shadowTextureCube(texcoord0, texcoord0_w)";
+        case TexturingRegs::TextureConfig::Disabled:
+            return "vec4(0.0)";
         default:
-            LOG_CRITICAL(HW_GPU, "Unhandled texture type %x",
+            LOG_CRITICAL(HW_GPU, "Unhandled texture type {:x}",
                          static_cast<int>(state.texture0_type));
             UNIMPLEMENTED();
             return "texture(tex0, texcoord0)";
@@ -323,7 +346,7 @@ static std::string SampleTexture(const PicaFSConfig& config, unsigned texture_un
         if (state.proctex.enable) {
             return "ProcTex()";
         } else {
-            LOG_ERROR(Render_OpenGL, "Using Texture3 without enabling it");
+            LOG_DEBUG(Render_OpenGL, "Using Texture3 without enabling it");
             return "vec4(0.0)";
         }
     default:
@@ -370,7 +393,7 @@ static void AppendSource(std::string& out, const PicaFSConfig& config,
         break;
     default:
         out += "vec4(0.0)";
-        LOG_CRITICAL(Render_OpenGL, "Unknown source op %u", static_cast<u32>(source));
+        LOG_CRITICAL(Render_OpenGL, "Unknown source op {}", static_cast<u32>(source));
         break;
     }
 }
@@ -428,7 +451,7 @@ static void AppendColorModifier(std::string& out, const PicaFSConfig& config,
         break;
     default:
         out += "vec3(0.0)";
-        LOG_CRITICAL(Render_OpenGL, "Unknown color modifier op %u", static_cast<u32>(modifier));
+        LOG_CRITICAL(Render_OpenGL, "Unknown color modifier op {}", static_cast<u32>(modifier));
         break;
     }
 }
@@ -477,7 +500,7 @@ static void AppendAlphaModifier(std::string& out, const PicaFSConfig& config,
         break;
     default:
         out += "0.0";
-        LOG_CRITICAL(Render_OpenGL, "Unknown alpha modifier op %u", static_cast<u32>(modifier));
+        LOG_CRITICAL(Render_OpenGL, "Unknown alpha modifier op {}", static_cast<u32>(modifier));
         break;
     }
 }
@@ -521,7 +544,7 @@ static void AppendColorCombiner(std::string& out, TevStageConfig::Operation oper
         break;
     default:
         out += "vec3(0.0)";
-        LOG_CRITICAL(Render_OpenGL, "Unknown color combiner operation: %u",
+        LOG_CRITICAL(Render_OpenGL, "Unknown color combiner operation: {}",
                      static_cast<u32>(operation));
         break;
     }
@@ -562,7 +585,7 @@ static void AppendAlphaCombiner(std::string& out, TevStageConfig::Operation oper
         break;
     default:
         out += "0.0";
-        LOG_CRITICAL(Render_OpenGL, "Unknown alpha combiner operation: %u",
+        LOG_CRITICAL(Render_OpenGL, "Unknown alpha combiner operation: {}",
                      static_cast<u32>(operation));
         break;
     }
@@ -593,7 +616,7 @@ static void AppendAlphaTestCondition(std::string& out, FramebufferRegs::CompareF
 
     default:
         out += "false";
-        LOG_CRITICAL(Render_OpenGL, "Unknown alpha test condition %u", static_cast<u32>(func));
+        LOG_CRITICAL(Render_OpenGL, "Unknown alpha test condition {}", static_cast<u32>(func));
         break;
     }
 }
@@ -763,7 +786,7 @@ static void WriteLighting(std::string& out, const PicaFSConfig& config) {
             break;
 
         default:
-            LOG_CRITICAL(HW_GPU, "Unknown lighting LUT input %d\n", (int)input);
+            LOG_CRITICAL(HW_GPU, "Unknown lighting LUT input {}", (int)input);
             UNIMPLEMENTED();
             index = "0.0";
             break;
@@ -987,7 +1010,7 @@ void AppendProcTexShiftOffset(std::string& out, const std::string& v, ProcTexShi
         out += offset + " * (((int(" + v + ") + 1) / 2) % 2)";
         break;
     default:
-        LOG_CRITICAL(HW_GPU, "Unknown shift mode %u", static_cast<u32>(mode));
+        LOG_CRITICAL(HW_GPU, "Unknown shift mode {}", static_cast<u32>(mode));
         out += "0";
         break;
     }
@@ -1013,14 +1036,14 @@ void AppendProcTexClamp(std::string& out, const std::string& var, ProcTexClamp m
         out += var + " = " + var + " > 0.5 ? 1.0 : 0.0;\n";
         break;
     default:
-        LOG_CRITICAL(HW_GPU, "Unknown clamp mode %u", static_cast<u32>(mode));
+        LOG_CRITICAL(HW_GPU, "Unknown clamp mode {}", static_cast<u32>(mode));
         out += var + " = " + "min(" + var + ", 1.0);\n";
         break;
     }
 }
 
 void AppendProcTexCombineAndMap(std::string& out, ProcTexCombiner combiner,
-                                const std::string& map_lut) {
+                                const std::string& offset) {
     std::string combined;
     switch (combiner) {
     case ProcTexCombiner::U:
@@ -1054,11 +1077,11 @@ void AppendProcTexCombineAndMap(std::string& out, ProcTexCombiner combiner,
         combined = "min(((u + v) * 0.5 + sqrt(u * u + v * v)) * 0.5, 1.0)";
         break;
     default:
-        LOG_CRITICAL(HW_GPU, "Unknown combiner %u", static_cast<u32>(combiner));
+        LOG_CRITICAL(HW_GPU, "Unknown combiner {}", static_cast<u32>(combiner));
         combined = "0.0";
         break;
     }
-    out += "ProcTexLookupLUT(" + map_lut + ", " + combined + ")";
+    out += "ProcTexLookupLUT(" + offset + ", " + combined + ")";
 }
 
 void AppendProcTexSampler(std::string& out, const PicaFSConfig& config) {
@@ -1067,12 +1090,12 @@ void AppendProcTexSampler(std::string& out, const PicaFSConfig& config) {
     // coord=1.0 is lut[127]+lut_diff[127]. For other indices, the result is interpolated using
     // value entries and difference entries.
     out += R"(
-float ProcTexLookupLUT(samplerBuffer lut, float coord) {
+float ProcTexLookupLUT(int offset, float coord) {
     coord *= 128;
     float index_i = clamp(floor(coord), 0.0, 127.0);
     float index_f = coord - index_i; // fract() cannot be used here because 128.0 needs to be
                                      // extracted as index_i = 127.0 and index_f = 1.0
-    vec2 entry = texelFetch(lut, int(index_i)).rg;
+    vec2 entry = texelFetch(texture_buffer_lut_rg, int(index_i) + offset).rg;
     return clamp(entry.r + entry.g * index_f, 0.0, 1.0);
 }
     )";
@@ -1108,8 +1131,8 @@ float ProcTexNoiseCoef(vec2 x) {
     float g2 = ProcTexNoiseRand2D(point + vec2(0.0, 1.0)) * (frac.x + frac.y - 1.0);
     float g3 = ProcTexNoiseRand2D(point + vec2(1.0, 1.0)) * (frac.x + frac.y - 2.0);
 
-    float x_noise = ProcTexLookupLUT(proctex_noise_lut, frac.x);
-    float y_noise = ProcTexLookupLUT(proctex_noise_lut, frac.y);
+    float x_noise = ProcTexLookupLUT(proctex_noise_lut_offset, frac.x);
+    float y_noise = ProcTexLookupLUT(proctex_noise_lut_offset, frac.y);
     float x0 = mix(g0, g1, x_noise);
     float x1 = mix(g2, g3, x_noise);
     return mix(x0, x1, y_noise);
@@ -1117,14 +1140,62 @@ float ProcTexNoiseCoef(vec2 x) {
         )";
     }
 
+    out += "vec4 SampleProcTexColor(float lut_coord, int level) {\n";
+    out += "int lut_width = " + std::to_string(config.state.proctex.lut_width) + " >> level;\n";
+    std::string offset0 = std::to_string(config.state.proctex.lut_offset0);
+    std::string offset1 = std::to_string(config.state.proctex.lut_offset1);
+    std::string offset2 = std::to_string(config.state.proctex.lut_offset2);
+    std::string offset3 = std::to_string(config.state.proctex.lut_offset3);
+    // Offsets for level 4-7 seem to be hardcoded
+    out += "int lut_offsets[8] = int[](" + offset0 + ", " + offset1 + ", " + offset2 + ", " +
+           offset3 + ", 0xF0, 0xF8, 0xFC, 0xFE);\n";
+    out += "int lut_offset = lut_offsets[level];\n";
+    // For the color lut, coord=0.0 is lut[offset] and coord=1.0 is lut[offset+width-1]
+    out += "lut_coord *= lut_width - 1;\n";
+
+    switch (config.state.proctex.lut_filter) {
+    case ProcTexFilter::Linear:
+    case ProcTexFilter::LinearMipmapLinear:
+    case ProcTexFilter::LinearMipmapNearest:
+        out += "int lut_index_i = int(lut_coord) + lut_offset;\n";
+        out += "float lut_index_f = fract(lut_coord);\n";
+        out += "return texelFetch(texture_buffer_lut_rgba, lut_index_i + "
+               "proctex_lut_offset) + "
+               "lut_index_f * "
+               "texelFetch(texture_buffer_lut_rgba, lut_index_i + proctex_diff_lut_offset);\n";
+        break;
+    case ProcTexFilter::Nearest:
+    case ProcTexFilter::NearestMipmapLinear:
+    case ProcTexFilter::NearestMipmapNearest:
+        out += "lut_coord += lut_offset;\n";
+        // Note: float->int conversion here is indeed floor, not round
+        out += "return texelFetch(texture_buffer_lut_rgba, int(lut_coord) + "
+               "proctex_lut_offset);\n";
+        break;
+    }
+
+    out += "}\n";
+
     out += "vec4 ProcTex() {\n";
     if (config.state.proctex.coord < 3) {
         out += "vec2 uv = abs(texcoord" + std::to_string(config.state.proctex.coord) + ");\n";
     } else {
-        NGLOG_CRITICAL(Render_OpenGL, "Unexpected proctex.coord >= 3");
+        LOG_CRITICAL(Render_OpenGL, "Unexpected proctex.coord >= 3");
         out += "vec2 uv = abs(texcoord0);\n";
     }
 
+    // This LOD formula is the same as the LOD upper limit defined in OpenGL.
+    // f(x, y) <= m_u + m_v + m_w
+    // (See OpenGL 4.6 spec, 8.14.1 - Scale Factor and Level-of-Detail)
+    // Note: this is different from the one normal 2D textures use.
+    out += "vec2 duv = max(abs(dFdx(uv)), abs(dFdy(uv)));\n";
+    // unlike normal texture, the bias is inside the log2
+    out += "float lod = log2(abs(" + std::to_string(config.state.proctex.lut_width) +
+           " * proctex_bias) * (duv.x + duv.y));\n";
+    out += "if (proctex_bias == 0.0) lod = 0.0;\n";
+    out += "lod = clamp(lod, " +
+           std::to_string(std::max<float>(0.0f, config.state.proctex.lod_min)) + ", " +
+           std::to_string(std::min<float>(7.0f, config.state.proctex.lod_max)) + ");\n";
     // Get shift offset before noise generation
     out += "float u_shift = ";
     AppendProcTexShiftOffset(out, "uv.y", config.state.proctex.u_shift,
@@ -1151,28 +1222,25 @@ float ProcTexNoiseCoef(vec2 x) {
 
     // Combine and map
     out += "float lut_coord = ";
-    AppendProcTexCombineAndMap(out, config.state.proctex.color_combiner, "proctex_color_map");
+    AppendProcTexCombineAndMap(out, config.state.proctex.color_combiner,
+                               "proctex_color_map_offset");
     out += ";\n";
 
-    // Look up color
-    // For the color lut, coord=0.0 is lut[offset] and coord=1.0 is lut[offset+width-1]
-    out += "lut_coord *= " + std::to_string(config.state.proctex.lut_width - 1) + ";\n";
-    // TODO(wwylele): implement mipmap
     switch (config.state.proctex.lut_filter) {
     case ProcTexFilter::Linear:
-    case ProcTexFilter::LinearMipmapLinear:
-    case ProcTexFilter::LinearMipmapNearest:
-        out += "int lut_index_i = int(lut_coord) + " +
-               std::to_string(config.state.proctex.lut_offset) + ";\n";
-        out += "float lut_index_f = fract(lut_coord);\n";
-        out += "vec4 final_color = texelFetch(proctex_lut, lut_index_i) + lut_index_f * "
-               "texelFetch(proctex_diff_lut, lut_index_i);\n";
-        break;
     case ProcTexFilter::Nearest:
-    case ProcTexFilter::NearestMipmapLinear:
+        out += "vec4 final_color = SampleProcTexColor(lut_coord, 0);\n";
+        break;
     case ProcTexFilter::NearestMipmapNearest:
-        out += "lut_coord += " + std::to_string(config.state.proctex.lut_offset) + ";\n";
-        out += "vec4 final_color = texelFetch(proctex_lut, int(round(lut_coord)));\n";
+    case ProcTexFilter::LinearMipmapNearest:
+        out += "vec4 final_color = SampleProcTexColor(lut_coord, int(round(lod)));\n";
+        break;
+    case ProcTexFilter::NearestMipmapLinear:
+    case ProcTexFilter::LinearMipmapLinear:
+        out += "int lod_i = int(lod);\n";
+        out += "float lod_f = fract(lod);\n";
+        out += "vec4 final_color = mix(SampleProcTexColor(lut_coord, lod_i), "
+               "SampleProcTexColor(lut_coord, lod_i + 1), lod_f);\n";
         break;
     }
 
@@ -1180,7 +1248,8 @@ float ProcTexNoiseCoef(vec2 x) {
         // Note: in separate alpha mode, the alpha channel skips the color LUT look up stage. It
         // uses the output of CombineAndMap directly instead.
         out += "float final_alpha = ";
-        AppendProcTexCombineAndMap(out, config.state.proctex.alpha_combiner, "proctex_alpha_map");
+        AppendProcTexCombineAndMap(out, config.state.proctex.alpha_combiner,
+                                   "proctex_alpha_map_offset");
         out += ";\n";
         out += "return vec4(final_color.xyz, final_alpha);\n}\n";
     } else {
@@ -1192,6 +1261,12 @@ std::string GenerateFragmentShader(const PicaFSConfig& config, bool separable_sh
     const auto& state = config.state;
 
     std::string out = GLShader::GetGLSLVersionString();
+    std::string out = R"(
+#extension GL_ARB_shader_image_load_store : enable
+#extension GL_ARB_shader_image_size : enable
+#define ALLOW_SHADOW (defined(GL_ARB_shader_image_load_store) && defined(GL_ARB_shader_image_size))
+)";
+
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }
@@ -1221,13 +1296,18 @@ uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform sampler2D tex2;
 uniform samplerCube tex_cube;
-uniform samplerBuffer lighting_lut;
-uniform samplerBuffer fog_lut;
-uniform samplerBuffer proctex_noise_lut;
-uniform samplerBuffer proctex_color_map;
-uniform samplerBuffer proctex_alpha_map;
-uniform samplerBuffer proctex_lut;
-uniform samplerBuffer proctex_diff_lut;
+uniform samplerBuffer texture_buffer_lut_rg;
+uniform samplerBuffer texture_buffer_lut_rgba;
+
+#if ALLOW_SHADOW
+layout(r32ui) uniform readonly uimage2D shadow_texture_px;
+layout(r32ui) uniform readonly uimage2D shadow_texture_nx;
+layout(r32ui) uniform readonly uimage2D shadow_texture_py;
+layout(r32ui) uniform readonly uimage2D shadow_texture_ny;
+layout(r32ui) uniform readonly uimage2D shadow_texture_pz;
+layout(r32ui) uniform readonly uimage2D shadow_texture_nz;
+layout(r32ui) uniform uimage2D shadow_buffer;
+#endif
 )";
 
     out += UniformBlockDef;
@@ -1239,7 +1319,7 @@ vec3 quaternion_rotate(vec4 q, vec3 v) {
 }
 
 float LookupLightingLUT(int lut_index, int index, float delta) {
-    vec2 entry = texelFetch(lighting_lut, lut_index * 256 + index).rg;
+    vec2 entry = texelFetch(texture_buffer_lut_rg, lighting_lut_offset[lut_index >> 2][lut_index & 3] + index).rg;
     return entry.r + entry.g * delta;
 }
 
@@ -1272,6 +1352,147 @@ vec4 byteround(vec4 x) {
     return round(x * 255.0) * (1.0 / 255.0);
 }
 
+#if ALLOW_SHADOW
+
+uvec2 DecodeShadow(uint pixel) {
+    return uvec2(pixel >> 8, pixel & 0xFFu);
+}
+
+uint EncodeShadow(uvec2 pixel) {
+    return (pixel.x << 8) | pixel.y;
+}
+
+float CompareShadow(uint pixel, uint z) {
+    uvec2 p = DecodeShadow(pixel);
+    return mix(float(p.y) * (1.0 / 255.0), 0.0, p.x <= z);
+}
+
+float SampleShadow2D(ivec2 uv, uint z) {
+    if (any(bvec4( lessThan(uv, ivec2(0)), greaterThanEqual(uv, imageSize(shadow_texture_px)) )))
+        return 1.0;
+    return CompareShadow(imageLoad(shadow_texture_px, uv).x, z);
+}
+
+float mix2(vec4 s, vec2 a) {
+    vec2 t = mix(s.xy, s.zw, a.yy);
+    return mix(t.x, t.y, a.x);
+}
+
+vec4 shadowTexture(vec2 uv, float w) {
+)";
+    if (!config.state.shadow_texture_orthographic) {
+        out += "uv /= w;";
+    }
+    out += "uint z = uint(max(0, int(min(abs(w), 1.0) * 0xFFFFFF) - " +
+           std::to_string(state.shadow_texture_bias) + "));";
+    out += R"(
+    vec2 coord = vec2(imageSize(shadow_texture_px)) * uv - vec2(0.5);
+    vec2 coord_floor = floor(coord);
+    vec2 f = coord - coord_floor;
+    ivec2 i = ivec2(coord_floor);
+    vec4 s = vec4(
+        SampleShadow2D(i              , z),
+        SampleShadow2D(i + ivec2(1, 0), z),
+        SampleShadow2D(i + ivec2(0, 1), z),
+        SampleShadow2D(i + ivec2(1, 1), z));
+    return vec4(mix2(s, f));
+}
+
+vec4 shadowTextureCube(vec2 uv, float w) {
+    ivec2 size = imageSize(shadow_texture_px);
+    vec3 c = vec3(uv, w);
+    vec3 a = abs(c);
+    if (a.x > a.y && a.x > a.z) {
+        w = a.x;
+        uv = -c.zy;
+        if (c.x < 0.0) uv.x = -uv.x;
+    } else if (a.y > a.z) {
+        w = a.y;
+        uv = c.xz;
+        if (c.y < 0.0) uv.y = -uv.y;
+    } else {
+        w = a.z;
+        uv = -c.xy;
+        if (c.z > 0.0) uv.x = -uv.x;
+    }
+)";
+    out += "uint z = uint(max(0, int(min(w, 1.0) * 0xFFFFFF) - " +
+           std::to_string(state.shadow_texture_bias) + "));";
+    out += R"(
+    vec2 coord = vec2(size) * (uv / w * vec2(0.5) + vec2(0.5)) - vec2(0.5);
+    vec2 coord_floor = floor(coord);
+    vec2 f = coord - coord_floor;
+    ivec2 i00 = ivec2(coord_floor);
+    ivec2 i10 = i00 + ivec2(1, 0);
+    ivec2 i01 = i00 + ivec2(0, 1);
+    ivec2 i11 = i00 + ivec2(1, 1);
+    ivec2 cmin = ivec2(0), cmax = size - ivec2(1, 1);
+    i00 = clamp(i00, cmin, cmax);
+    i10 = clamp(i10, cmin, cmax);
+    i01 = clamp(i01, cmin, cmax);
+    i11 = clamp(i11, cmin, cmax);
+    uvec4 pixels;
+    // This part should have been refactored into functions,
+    // but many drivers don't like passing uimage2D as parameters
+    if (a.x > a.y && a.x > a.z) {
+        if (c.x > 0.0)
+            pixels = uvec4(
+                imageLoad(shadow_texture_px, i00).r,
+                imageLoad(shadow_texture_px, i10).r,
+                imageLoad(shadow_texture_px, i01).r,
+                imageLoad(shadow_texture_px, i11).r);
+        else
+            pixels = uvec4(
+                imageLoad(shadow_texture_nx, i00).r,
+                imageLoad(shadow_texture_nx, i10).r,
+                imageLoad(shadow_texture_nx, i01).r,
+                imageLoad(shadow_texture_nx, i11).r);
+    } else if (a.y > a.z) {
+        if (c.y > 0.0)
+            pixels = uvec4(
+                imageLoad(shadow_texture_py, i00).r,
+                imageLoad(shadow_texture_py, i10).r,
+                imageLoad(shadow_texture_py, i01).r,
+                imageLoad(shadow_texture_py, i11).r);
+        else
+            pixels = uvec4(
+                imageLoad(shadow_texture_ny, i00).r,
+                imageLoad(shadow_texture_ny, i10).r,
+                imageLoad(shadow_texture_ny, i01).r,
+                imageLoad(shadow_texture_ny, i11).r);
+    } else {
+        if (c.z > 0.0)
+            pixels = uvec4(
+                imageLoad(shadow_texture_pz, i00).r,
+                imageLoad(shadow_texture_pz, i10).r,
+                imageLoad(shadow_texture_pz, i01).r,
+                imageLoad(shadow_texture_pz, i11).r);
+        else
+            pixels = uvec4(
+                imageLoad(shadow_texture_nz, i00).r,
+                imageLoad(shadow_texture_nz, i10).r,
+                imageLoad(shadow_texture_nz, i01).r,
+                imageLoad(shadow_texture_nz, i11).r);
+    }
+    vec4 s = vec4(
+        CompareShadow(pixels.x, z),
+        CompareShadow(pixels.y, z),
+        CompareShadow(pixels.z, z),
+        CompareShadow(pixels.w, z));
+    return vec4(mix2(s, f));
+}
+
+#else
+
+vec4 shadowTexture(vec2 uv, float w) {
+    return vec4(1.0);
+}
+
+vec4 shadowTextureCube(vec2 uv, float w) {
+    return vec4(1.0);
+}
+
+#endif
 )";
 
     if (config.state.proctex.enable)
@@ -1341,7 +1562,8 @@ vec4 secondary_fragment_color = vec4(0.0);
         // Generate clamped fog factor from LUT for given fog index
         out += "float fog_i = clamp(floor(fog_index), 0.0, 127.0);\n";
         out += "float fog_f = fog_index - fog_i;\n";
-        out += "vec2 fog_lut_entry = texelFetch(fog_lut, int(fog_i)).rg;\n";
+        out += "vec2 fog_lut_entry = texelFetch(texture_buffer_lut_rg, int(fog_i) + "
+               "fog_lut_offset).rg;\n";
         out += "float fog_factor = fog_lut_entry.r + fog_lut_entry.g * fog_f;\n";
         out += "fog_factor = clamp(fog_factor, 0.0, 1.0);\n";
 
@@ -1355,9 +1577,38 @@ vec4 secondary_fragment_color = vec4(0.0);
         return out;
     }
 
-    out += "gl_FragDepth = depth;\n";
-    // Round the final fragment color to maintain the PICA's 8 bits of precision
-    out += "color = byteround(last_tex_env_out);\n";
+    if (state.shadow_rendering) {
+        out += R"(
+#if ALLOW_SHADOW
+uint d = uint(clamp(depth, 0.0, 1.0) * 0xFFFFFF);
+uint s = uint(last_tex_env_out.g * 0xFF);
+ivec2 image_coord = ivec2(gl_FragCoord.xy);
+
+uint old = imageLoad(shadow_buffer, image_coord).x;
+uint new;
+uint old2;
+do {
+    old2 = old;
+
+    uvec2 ref = DecodeShadow(old);
+    if (d < ref.x) {
+        if (s == 0u) {
+            ref.x = d;
+        } else {
+            s = uint(float(s) / (shadow_bias_constant + shadow_bias_linear * float(d) / float(ref.x)));
+            ref.y = min(s, ref.y);
+        }
+    }
+    new = EncodeShadow(ref);
+
+} while ((old = imageAtomicCompSwap(shadow_buffer, image_coord, old, new)) != old2);
+#endif // ALLOW_SHADOW
+)";
+    } else {
+        out += "gl_FragDepth = depth;\n";
+        // Round the final fragment color to maintain the PICA's 8 bits of precision
+        out += "color = byteround(last_tex_env_out);\n";
+    }
 
     out += "}";
 

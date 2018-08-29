@@ -49,12 +49,16 @@ struct TitleInfo {
 
 static_assert(sizeof(TitleInfo) == 0x18, "Title info structure size is wrong");
 
+constexpr u8 OWNERSHIP_DOWNLOADED = 0x01;
+constexpr u8 OWNERSHIP_OWNED = 0x02;
+
 struct ContentInfo {
     u16_le index;
     u16_le type;
     u32_le content_id;
     u64_le size;
-    u64_le romfs_size;
+    u8 ownership;
+    INSERT_PADDING_BYTES(0x7);
 };
 
 static_assert(sizeof(ContentInfo) == 0x18, "Content info structure size is wrong");
@@ -143,8 +147,8 @@ ResultVal<size_t> CIAFile::WriteContentData(u64 offset, size_t length, const u8*
             // Keep tabs on how much of this content ID has been written so new range_min
             // values can be calculated.
             content_written[i] += available_to_write;
-            LOG_DEBUG(Service_AM, "Wrote %" PRIx64 " to content %u, total %" PRIx64,
-                      available_to_write, i, content_written[i]);
+            LOG_DEBUG(Service_AM, "Wrote {:x} to content {}, total {:x}", available_to_write, i,
+                      content_written[i]);
         }
     }
 
@@ -228,7 +232,7 @@ bool CIAFile::SetSize(u64 size) const {
 bool CIAFile::Close() const {
     bool complete = true;
     for (size_t i = 0; i < container.GetTitleMetadata().GetContentCount(); i++) {
-        if (content_written[i] < container.GetContentSize(i))
+        if (content_written[i] < container.GetContentSize(static_cast<u16>(i)))
             complete = false;
     }
 
@@ -277,10 +281,10 @@ void CIAFile::Flush() const {}
 
 InstallStatus InstallCIA(const std::string& path,
                          std::function<ProgressCallback>&& update_callback) {
-    LOG_INFO(Service_AM, "Installing %s...", path.c_str());
+    LOG_INFO(Service_AM, "Installing {}...", path);
 
     if (!FileUtil::Exists(path)) {
-        LOG_ERROR(Service_AM, "File %s does not exist!", path.c_str());
+        LOG_ERROR(Service_AM, "File {} does not exist!", path);
         return InstallStatus::ErrorFileNotFound;
     }
 
@@ -290,9 +294,9 @@ InstallStatus InstallCIA(const std::string& path,
             Service::AM::GetTitleMediaType(container.GetTitleMetadata().GetTitleID()));
 
         for (size_t i = 0; i < container.GetTitleMetadata().GetContentCount(); i++) {
-            if (container.GetTitleMetadata().GetContentTypeByIndex(i) &
+            if (container.GetTitleMetadata().GetContentTypeByIndex(static_cast<u16>(i)) &
                 FileSys::TMDContentTypeFlag::Encrypted) {
-                LOG_ERROR(Service_AM, "File %s is encrypted! Aborting...", path.c_str());
+                LOG_ERROR(Service_AM, "File {} is encrypted! Aborting...", path);
                 return InstallStatus::ErrorEncrypted;
             }
         }
@@ -311,7 +315,7 @@ InstallStatus InstallCIA(const std::string& path,
             if (update_callback)
                 update_callback(total_bytes_read, file.GetSize());
             if (result.Failed()) {
-                LOG_ERROR(Service_AM, "CIA file installation aborted with error code %08x",
+                LOG_ERROR(Service_AM, "CIA file installation aborted with error code {:08x}",
                           result.Code().raw);
                 return InstallStatus::ErrorAborted;
             }
@@ -319,11 +323,11 @@ InstallStatus InstallCIA(const std::string& path,
         }
         installFile.Close();
 
-        LOG_INFO(Service_AM, "Installed %s successfully.", path.c_str());
+        LOG_INFO(Service_AM, "Installed {} successfully.", path);
         return InstallStatus::Success;
     }
 
-    LOG_ERROR(Service_AM, "CIA file %s is invalid!", path.c_str());
+    LOG_ERROR(Service_AM, "CIA file {} is invalid!", path);
     return InstallStatus::ErrorInvalid;
 }
 
@@ -385,7 +389,7 @@ std::string GetTitleContentPath(Service::FS::MediaType media_type, u64 tid, u16 
 
     if (media_type == Service::FS::MediaType::GameCard) {
         // TODO(shinyquagsire23): get current app file if TID matches?
-        LOG_ERROR(Service_AM, "Request for gamecard partition %u content path unimplemented!",
+        LOG_ERROR(Service_AM, "Request for gamecard partition {} content path unimplemented!",
                   static_cast<u32>(index));
         return "";
     }
@@ -395,7 +399,13 @@ std::string GetTitleContentPath(Service::FS::MediaType media_type, u64 tid, u16 
     u32 content_id = 0;
     FileSys::TitleMetadata tmd;
     if (tmd.Load(tmd_path) == Loader::ResultStatus::Success) {
-        content_id = tmd.GetContentIDByIndex(index);
+        if (index < tmd.GetContentCount()) {
+            content_id = tmd.GetContentIDByIndex(index);
+        } else {
+            LOG_ERROR(Service_AM, "Attempted to get path for non-existent content index {:04x}.",
+                      index);
+            return "";
+        }
 
         // TODO(shinyquagsire23): how does DLC actually get this folder on hardware?
         // For now, check if the second (index 1) content has the optional flag set, for most
@@ -484,7 +494,7 @@ void Module::Interface::GetNumPrograms(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(RESULT_SUCCESS);
-    rb.Push<u32>(am->am_title_list[media_type].size());
+    rb.Push<u32>(static_cast<u32>(am->am_title_list[media_type].size()));
 }
 
 void Module::Interface::FindDLCContentInfos(Kernel::HLERequestContext& ctx) {
@@ -520,17 +530,30 @@ void Module::Interface::FindDLCContentInfos(Kernel::HLERequestContext& ctx) {
         for (size_t i = 0; i < content_count; i++) {
             std::shared_ptr<FileUtil::IOFile> romfs_file;
             u64 romfs_offset = 0;
-            u64 romfs_size = 0;
 
-            FileSys::NCCHContainer ncch_container(GetTitleContentPath(media_type, title_id, i));
-            ncch_container.ReadRomFS(romfs_file, romfs_offset, romfs_size);
+            if (content_requested[i] >= tmd.GetContentCount()) {
+                LOG_ERROR(Service_AM,
+                          "Attempted to get info for non-existent content index {:04x}.",
+                          content_requested[i]);
+
+                IPC::RequestBuilder rb = rp.MakeBuilder(1, 4);
+                rb.Push<u32>(-1); // TODO(Steveice10): Find the right error code
+                rb.PushMappedBuffer(content_requested_in);
+                rb.PushMappedBuffer(content_info_out);
+                return;
+            }
 
             ContentInfo content_info = {};
-            content_info.index = static_cast<u16>(i);
+            content_info.index = content_requested[i];
             content_info.type = tmd.GetContentTypeByIndex(content_requested[i]);
             content_info.content_id = tmd.GetContentIDByIndex(content_requested[i]);
             content_info.size = tmd.GetContentSizeByIndex(content_requested[i]);
-            content_info.romfs_size = romfs_size;
+            content_info.ownership =
+                OWNERSHIP_OWNED; // TODO(Steveice10): Pull this from the ticket.
+
+            if (FileUtil::Exists(GetTitleContentPath(media_type, title_id, content_requested[i]))) {
+                content_info.ownership |= OWNERSHIP_DOWNLOADED;
+            }
 
             content_info_out.Write(&content_info, write_offset, sizeof(ContentInfo));
             write_offset += sizeof(ContentInfo);
@@ -569,25 +592,28 @@ void Module::Interface::ListDLCContentInfos(Kernel::HLERequestContext& ctx) {
     u32 copied = 0;
     FileSys::TitleMetadata tmd;
     if (tmd.Load(tmd_path) == Loader::ResultStatus::Success) {
-        copied = std::min(content_count, static_cast<u32>(tmd.GetContentCount()));
+        u32 end_index =
+            std::min(start_index + content_count, static_cast<u32>(tmd.GetContentCount()));
         std::size_t write_offset = 0;
-        for (u32 i = start_index; i < copied; i++) {
+        for (u32 i = start_index; i < end_index; i++) {
             std::shared_ptr<FileUtil::IOFile> romfs_file;
             u64 romfs_offset = 0;
-            u64 romfs_size = 0;
-
-            FileSys::NCCHContainer ncch_container(GetTitleContentPath(media_type, title_id, i));
-            ncch_container.ReadRomFS(romfs_file, romfs_offset, romfs_size);
 
             ContentInfo content_info = {};
             content_info.index = static_cast<u16>(i);
             content_info.type = tmd.GetContentTypeByIndex(i);
             content_info.content_id = tmd.GetContentIDByIndex(i);
             content_info.size = tmd.GetContentSizeByIndex(i);
-            content_info.romfs_size = romfs_size;
+            content_info.ownership =
+                OWNERSHIP_OWNED; // TODO(Steveice10): Pull this from the ticket.
+
+            if (FileUtil::Exists(GetTitleContentPath(media_type, title_id, i))) {
+                content_info.ownership |= OWNERSHIP_DOWNLOADED;
+            }
 
             content_info_out.Write(&content_info, write_offset, sizeof(ContentInfo));
             write_offset += sizeof(ContentInfo);
+            copied++;
         }
     }
 
@@ -607,7 +633,7 @@ void Module::Interface::DeleteContents(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
     rb.Push(RESULT_SUCCESS);
     rb.PushMappedBuffer(content_ids_in);
-    LOG_WARNING(Service_AM, "(STUBBED) media_type=%u, title_id=0x%016" PRIx64 ", content_count=%u",
+    LOG_WARNING(Service_AM, "(STUBBED) media_type={}, title_id=0x{:016x}, content_count={}",
                 media_type, title_id, content_count);
 }
 
@@ -697,7 +723,7 @@ void Module::Interface::DeleteUserProgram(Kernel::HLERequestContext& ctx) {
                            ErrorSummary::InvalidArgument, ErrorLevel::Usage));
         return;
     }
-    LOG_INFO(Service_AM, "Deleting title 0x%016" PRIx64, title_id);
+    LOG_INFO(Service_AM, "Deleting title 0x{:016x}", title_id);
     std::string path = GetTitlePath(media_type, title_id);
     if (!FileUtil::Exists(path)) {
         rb.Push(ResultCode(ErrorDescription::NotFound, ErrorModule::AM, ErrorSummary::InvalidState,
@@ -828,7 +854,7 @@ void Module::Interface::ListDataTitleTicketInfos(Kernel::HLERequestContext& ctx)
     rb.PushMappedBuffer(ticket_info_out);
 
     LOG_WARNING(Service_AM,
-                "(STUBBED) ticket_count=0x%08X, title_id=0x%016" PRIx64 ", start_index=0x%08X",
+                "(STUBBED) ticket_count=0x{:08X}, title_id=0x{:016x}, start_index=0x{:08X}",
                 ticket_count, title_id, start_index);
 }
 
@@ -854,10 +880,10 @@ void Module::Interface::GetDLCContentInfoCount(Kernel::HLERequestContext& ctx) {
 
     FileSys::TitleMetadata tmd;
     if (tmd.Load(tmd_path) == Loader::ResultStatus::Success) {
-        rb.Push<u32>(tmd.GetContentCount());
+        rb.Push<u32>(static_cast<u32>(tmd.GetContentCount()));
     } else {
         rb.Push<u32>(1); // Number of content infos plus one
-        LOG_WARNING(Service_AM, "(STUBBED) called media_type=%u, title_id=0x%016" PRIx64,
+        LOG_WARNING(Service_AM, "(STUBBED) called media_type={}, title_id=0x{:016x}",
                     static_cast<u32>(media_type), title_id);
     }
 }
@@ -868,7 +894,7 @@ void Module::Interface::DeleteTicket(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
-    LOG_WARNING(Service_AM, "(STUBBED) called title_id=0x%016" PRIx64 "", title_id);
+    LOG_WARNING(Service_AM, "(STUBBED) called title_id=0x{:016x}", title_id);
 }
 
 void Module::Interface::GetNumTickets(Kernel::HLERequestContext& ctx) {
@@ -878,7 +904,7 @@ void Module::Interface::GetNumTickets(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(RESULT_SUCCESS);
     rb.Push(ticket_count);
-    LOG_WARNING(Service_AM, "(STUBBED) called ticket_count=0x%08x", ticket_count);
+    LOG_WARNING(Service_AM, "(STUBBED) called ticket_count=0x{:08x}", ticket_count);
 }
 
 void Module::Interface::GetTicketList(Kernel::HLERequestContext& ctx) {
@@ -891,7 +917,7 @@ void Module::Interface::GetTicketList(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
     rb.Push(ticket_list_count);
     rb.PushMappedBuffer(ticket_tids_out);
-    LOG_WARNING(Service_AM, "(STUBBED) ticket_list_count=0x%08x, ticket_index=0x%08x",
+    LOG_WARNING(Service_AM, "(STUBBED) ticket_list_count=0x{:08x}, ticket_index=0x{:08x}",
                 ticket_list_count, ticket_index);
 }
 
@@ -903,7 +929,7 @@ void Module::Interface::QueryAvailableTitleDatabase(Kernel::HLERequestContext& c
     rb.Push(RESULT_SUCCESS); // No error
     rb.Push(true);
 
-    LOG_WARNING(Service_AM, "(STUBBED) media_type=%u", media_type);
+    LOG_WARNING(Service_AM, "(STUBBED) media_type={}", media_type);
 }
 
 void Module::Interface::CheckContentRights(Kernel::HLERequestContext& ctx) {
@@ -919,7 +945,7 @@ void Module::Interface::CheckContentRights(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS); // No error
     rb.Push(has_rights);
 
-    LOG_WARNING(Service_AM, "(STUBBED) tid=%016" PRIx64 ", content_index=%u", tid, content_index);
+    LOG_WARNING(Service_AM, "(STUBBED) tid={:016x}, content_index={}", tid, content_index);
 }
 
 void Module::Interface::CheckContentRightsIgnorePlatform(Kernel::HLERequestContext& ctx) {
@@ -935,7 +961,7 @@ void Module::Interface::CheckContentRightsIgnorePlatform(Kernel::HLERequestConte
     rb.Push(RESULT_SUCCESS); // No error
     rb.Push(has_rights);
 
-    LOG_WARNING(Service_AM, "(STUBBED) tid=%016" PRIx64 ", content_index=%u", tid, content_index);
+    LOG_WARNING(Service_AM, "(STUBBED) tid={:016x}, content_index={}", tid, content_index);
 }
 
 void Module::Interface::BeginImportProgram(Kernel::HLERequestContext& ctx) {
@@ -961,7 +987,7 @@ void Module::Interface::BeginImportProgram(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS); // No error
     rb.PushCopyObjects(file->Connect());
 
-    LOG_WARNING(Service_AM, "(STUBBED) media_type=%u", static_cast<u32>(media_type));
+    LOG_WARNING(Service_AM, "(STUBBED) media_type={}", static_cast<u32>(media_type));
 }
 
 void Module::Interface::EndImportProgram(Kernel::HLERequestContext& ctx) {
@@ -1201,7 +1227,7 @@ void Module::Interface::DeleteProgram(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x0410, 3, 0);
     auto media_type = rp.PopEnum<FS::MediaType>();
     u64 title_id = rp.Pop<u64>();
-    LOG_INFO(Service_AM, "Deleting title 0x%016" PRIx64, title_id);
+    LOG_INFO(Service_AM, "Deleting title 0x{:016x}", title_id);
     std::string path = GetTitlePath(media_type, title_id);
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     if (!FileUtil::Exists(path)) {
