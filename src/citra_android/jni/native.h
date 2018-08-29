@@ -1,3 +1,6 @@
+// Copyright 2013 Dolphin Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
 
 // Initialise and run the emulator
 static int RunCitra(const std::string& path);
