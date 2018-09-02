@@ -80,12 +80,12 @@ static int RunCitra(const std::string& path) {
     SCOPE_EXIT({ MicroProfileShutdown(); });
 
     if (filepath.empty()) {
-        NGLOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
+        LOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
         return -1;
     }
 
     if (!movie_record.empty() && !movie_play.empty()) {
-        NGLOG_CRITICAL(Frontend, "Cannot both play and record a movie");
+        LOG_CRITICAL(Frontend, "Cannot both play and record a movie");
         return -1;
     }
 
@@ -112,28 +112,28 @@ static int RunCitra(const std::string& path) {
 
     switch (load_result) {
     case Core::System::ResultStatus::ErrorGetLoader:
-        NGLOG_CRITICAL(Frontend, "Failed to obtain loader for {}!", filepath);
+        LOG_CRITICAL(Frontend, "Failed to obtain loader for {}!", filepath);
         return -1;
     case Core::System::ResultStatus::ErrorLoader:
-        NGLOG_CRITICAL(Frontend, "Failed to load ROM!");
+        LOG_CRITICAL(Frontend, "Failed to load ROM!");
         return -1;
     case Core::System::ResultStatus::ErrorLoader_ErrorEncrypted:
-        NGLOG_CRITICAL(Frontend, "The game that you are trying to load must be decrypted before "
-                                 "being used with Citra. \n\n For more information on dumping and "
-                                 "decrypting games, please refer to: "
-                                 "https://citra-emu.org/wiki/dumping-game-cartridges/");
+        LOG_CRITICAL(Frontend, "The game that you are trying to load must be decrypted before "
+                               "being used with Citra. \n\n For more information on dumping and "
+                               "decrypting games, please refer to: "
+                               "https://citra-emu.org/wiki/dumping-game-cartridges/");
         return -1;
     case Core::System::ResultStatus::ErrorLoader_ErrorInvalidFormat:
-        NGLOG_CRITICAL(Frontend, "Error while loading ROM: The ROM format is not supported.");
+        LOG_CRITICAL(Frontend, "Error while loading ROM: The ROM format is not supported.");
         return -1;
     case Core::System::ResultStatus::ErrorNotInitialized:
-        NGLOG_CRITICAL(Frontend, "CPUCore not initialized");
+        LOG_CRITICAL(Frontend, "CPUCore not initialized");
         return -1;
     case Core::System::ResultStatus::ErrorSystemMode:
-        NGLOG_CRITICAL(Frontend, "Failed to determine system mode!");
+        LOG_CRITICAL(Frontend, "Failed to determine system mode!");
         return -1;
     case Core::System::ResultStatus::ErrorVideoCore:
-        NGLOG_CRITICAL(Frontend, "VideoCore not initialized");
+        LOG_CRITICAL(Frontend, "VideoCore not initialized");
         return -1;
     case Core::System::ResultStatus::Success:
         break; // Expected case
