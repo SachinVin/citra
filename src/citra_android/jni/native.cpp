@@ -4,6 +4,11 @@
 #include <string>
 #include <thread>
 
+// This needs to be included before getopt.h because the latter #defines symbols used by it
+#include "common/microprofile.h"
+
+#include <getopt.h>
+
 #include <android/native_window_jni.h>
 #include <jni.h>
 
@@ -17,20 +22,17 @@
 #include "common/logging/backend.h"
 #include "common/logging/filter.h"
 #include "common/logging/log.h"
-#include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
 #include "common/string_util.h"
 #include "core/core.h"
 #include "core/file_sys/cia_container.h"
+#include "core/frontend/applets/default_applets.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/hle/service/am/am.h"
-#include "core/hle/service/fs/archive.h"
 #include "core/loader/loader.h"
-#include "core/loader/smdh.h"
+#include "core/movie.h"
 #include "core/settings.h"
-#include "input_common/keyboard.h"
-#include "input_common/main.h"
 #include "network/network.h"
 
 JavaVM* g_java_vm;
@@ -94,8 +96,6 @@ static int RunCitra(const std::string& path) {
     // Apply the command line arguments
     Settings::values.gdbstub_port = gdb_port;
     Settings::values.use_gdbstub = use_gdbstub;
-    Settings::values.movie_play = std::move(movie_play);
-    Settings::values.movie_record = std::move(movie_record);
     Settings::Apply();
 
     InputManager::Init();
@@ -108,7 +108,7 @@ static int RunCitra(const std::string& path) {
         emu->~EmuWindow_Android();
     });
 
-    const Core::System::ResultStatus load_result{system.Load(emu, filepath)};
+    const Core::System::ResultStatus load_result{system.Load(*emu, filepath)};
 
     switch (load_result) {
     case Core::System::ResultStatus::ErrorGetLoader:
@@ -140,6 +140,13 @@ static int RunCitra(const std::string& path) {
     }
 
     Core::Telemetry().AddField(Telemetry::FieldType::App, "Frontend", "SDL");
+
+    if (!movie_play.empty()) {
+        Core::Movie::GetInstance().StartPlayback(movie_play);
+    }
+    if (!movie_record.empty()) {
+        Core::Movie::GetInstance().StartRecording(movie_record);
+    }
 
     while (is_running) {
         system.RunLoop();
@@ -202,7 +209,9 @@ void Java_org_citra_citra_1android_NativeLibrary_UnPauseEmulation(JNIEnv* env, j
 
 void Java_org_citra_citra_1android_NativeLibrary_PauseEmulation(JNIEnv* env, jobject obj) {}
 
-void Java_org_citra_citra_1android_NativeLibrary_StopEmulation(JNIEnv* env, jobject obj) {}
+void Java_org_citra_citra_1android_NativeLibrary_StopEmulation(JNIEnv* env, jobject obj) {
+    bool is_running = false;
+}
 
 jboolean Java_org_citra_citra_1android_NativeLibrary_IsRunning(JNIEnv* env, jobject obj) {
     return static_cast<jboolean>(is_running);
@@ -341,6 +350,7 @@ void Java_org_citra_citra_1android_services_DirectoryInitializationService_Creat
     JNIEnv* env, jobject obj) {}
 
 jstring Java_org_citra_citra_1android_NativeLibrary_GetUserDirectory(JNIEnv* env, jobject obj) {
+
     return nullptr;
 }
 
