@@ -6,12 +6,12 @@
 #include <memory>
 #include <vector>
 
+#include "citra_android/jni/game_info.h"
 #include "common/string_util.h"
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/loader/loader.h"
 #include "core/loader/smdh.h"
-#include "citra_android/jni/game_info.h"
 
 namespace GameInfo {
 std::vector<u8> GetSMDHData(std::string physical_name) {
@@ -48,7 +48,6 @@ std::vector<u8> GetSMDHData(std::string physical_name) {
     return smdh;
 }
 
-// test comment is here
 char16_t* GetTitle(std::string physical_name) {
     Loader::SMDH::TitleLanguage language = Loader::SMDH::TitleLanguage::English;
     std::vector<u8> smdh_data = GetSMDHData(physical_name);
