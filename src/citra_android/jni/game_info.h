@@ -2,6 +2,10 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <cstring>
+
+#include "common/common_types.h"
+
 namespace GameInfo {
 std::vector<u8> GetSMDHData(std::string physical_name);
 
