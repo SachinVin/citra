@@ -1261,7 +1261,7 @@ std::string GenerateFragmentShader(const PicaFSConfig& config, bool separable_sh
     const auto& state = config.state;
 
     std::string out = GLShader::GetGLSLVersionString();
-    out = R"(
+    out += R"(
 #extension GL_ARB_shader_image_load_store : enable
 #extension GL_ARB_shader_image_size : enable
 #define ALLOW_SHADOW (defined(GL_ARB_shader_image_load_store) && defined(GL_ARB_shader_image_size))
