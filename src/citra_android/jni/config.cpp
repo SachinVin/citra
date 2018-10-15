@@ -21,7 +21,7 @@
 
 Config::Config() {
     // TODO: Don't hardcode the path; let the frontend decide where to put the config files.
-    sdl2_config_loc = FileUtil::GetUserPath(D_CONFIG_IDX) + "sdl2-config.ini";
+    sdl2_config_loc = FileUtil::GetUserPath(D_CONFIG_IDX) + "config.ini";
     sdl2_config = std::make_unique<INIReader>(sdl2_config_loc);
 
     Reload();
