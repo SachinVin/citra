@@ -7,13 +7,13 @@
 #include <string>
 #include <glad/glad.h>
 #include "citra_android/jni/button_manager.h"
+#include "citra_android/jni/emu_window/emu_window.h"
 #include "citra_android/jni/ndk_helper/GLContext.h"
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
 #include "common/string_util.h"
 #include "core/3ds.h"
 #include "core/settings.h"
-#include "citra_android/jni/emu_window/emu_window.h"
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
 #include "input_common/motion_emu.h"

@@ -112,8 +112,6 @@ PicaFSConfig PicaFSConfig::BuildFromRegs(const Pica::Regs& regs) {
 
     auto& state = res.state;
 
-
-
     state.scissor_test_mode = regs.rasterizer.scissor_test.mode;
 
     state.depthmap_enable = regs.rasterizer.depthmap_enable;
@@ -803,7 +801,6 @@ static void WriteLighting(std::string& out, const PicaFSConfig& config) {
             // LUT index is in the range of (-1.0, 1.0)
             return "LookupLightingLUTSigned(" + sampler_string + ", " + index + ")";
         }
-
     };
 
     // Write the code to emulate each enabled light
@@ -852,10 +849,6 @@ static void WriteLighting(std::string& out, const PicaFSConfig& config) {
             dist_atten = "LookupLightingLUTUnsigned(" +
                          std::to_string(static_cast<unsigned>(sampler)) + "," + index + ")";
         }
-
-
-
-
 
         if (light_config.geometric_factor_0 || light_config.geometric_factor_1) {
             out += "geo_factor = dot(half_vector, half_vector);\n"
@@ -954,7 +947,6 @@ static void WriteLighting(std::string& out, const PicaFSConfig& config) {
 
             // Enabled for the specular lighting alpha component
             if (lighting.enable_secondary_alpha) {
-
 
                 out += "specular_sum.a = " + value + ";\n";
             }
@@ -1272,19 +1264,19 @@ std::string GenerateFragmentShader(const PicaFSConfig& config, bool separable_sh
     }
     out += R"(
 // High precision may or may not supported in GLES3. If it isn't, use medium precision instead.
-#ifdef GL_ES
-#ifdef GL_FRAGMENT_PRECISION_HIGH
+#if defined(GL_ES)
+#if defined(GL_FRAGMENT_PRECISION_HIGH)
 precision highp float;
 precision highp samplerBuffer;
 #else
 precision mediump float;
 precision mediump samplerBuffer;
-#endif // GL_FRAGMENT_PRECISION_HIGH
-#endif // GL_ES
+#endif // defined(GL_FRAGMENT_PRECISION_HIGH)
+#endif // defined(GL_ES)
 
-#ifndef GL_ES
+#if !defined(GL_ES)
 in vec4 gl_FragCoord;
-#endif // GL_ES
+#endif // !defined(GL_ES)
 )";
 
     out += GetVertexInterfaceDeclaration(false, separable_shader);
