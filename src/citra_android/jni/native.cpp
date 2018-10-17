@@ -93,6 +93,9 @@ static int RunCitra(const std::string& path) {
 
     log_filter.ParseFilterString(Settings::values.log_filter);
 
+    // Register frontend applets
+    Frontend::RegisterDefaultApplets();
+
     // Apply the command line arguments
     Settings::values.gdbstub_port = gdb_port;
     Settings::values.use_gdbstub = use_gdbstub;
