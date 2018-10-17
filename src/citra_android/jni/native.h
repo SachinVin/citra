@@ -122,6 +122,8 @@ JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_SetSysDirecto
                                                                                    jobject obj,
                                                                                    jstring path);
 
+JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_CreateConfigFile();
+
 JNIEXPORT jint JNICALL Java_org_citra_citra_1android_NativeLibrary_DefaultCPUCore(JNIEnv* env,
                                                                                   jobject obj);
 JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_SetProfiling(JNIEnv* env,

@@ -357,6 +357,10 @@ jstring Java_org_citra_citra_1android_NativeLibrary_GetUserDirectory(JNIEnv* env
     return nullptr;
 }
 
+void Java_org_citra_citra_1android_NativeLibrary_CreateConfigFile() {
+    new Config();
+}
+
 jint Java_org_citra_citra_1android_NativeLibrary_DefaultCPUCore(JNIEnv* env, jobject obj) {
     return 0;
 }
