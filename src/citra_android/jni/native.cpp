@@ -45,7 +45,11 @@ jmethodID s_jni_method_alert;
 
 EmuWindow_Android* emu;
 
-bool is_running;
+std::atomic<bool> is_running{false};
+std::atomic<bool> pause_emulation{false};
+
+std::mutex running_mutex;
+std::condition_variable cv;
 } // Anonymous namespace
 
 /**
@@ -147,8 +151,15 @@ static int RunCitra(const std::string& filepath) {
         Core::Movie::GetInstance().StartRecording(movie_record);
     }
 
+    is_running = true;
+
     while (is_running) {
-        system.RunLoop();
+        if(!pause_emulation) {
+            system.RunLoop();
+        } else {
+            std::unique_lock<std::mutex> lock(running_mutex);
+            cv.wait(lock, [] { return !pause_emulation || !is_running; });
+        }
     }
 
     return 0;
@@ -169,9 +180,7 @@ void Java_org_citra_citra_1android_NativeLibrary_SurfaceChanged(JNIEnv* env, job
                                                                 jobject surf) {
     s_surf = ANativeWindow_fromSurface(env, surf);
 
-    if (s_surf == nullptr)
-        LOG_ERROR(Frontend, "Error: Surface is null.");
-    else if (is_running) {
+    if (is_running) {
         emu->OnSurfaceChanged(s_surf);
     }
 
@@ -179,7 +188,7 @@ void Java_org_citra_citra_1android_NativeLibrary_SurfaceChanged(JNIEnv* env, job
 }
 
 void Java_org_citra_citra_1android_NativeLibrary_SurfaceDestroyed(JNIEnv* env, jobject obj) {
-    // is_running = false;
+    pause_emulation = true;
 }
 
 void Java_org_citra_citra_1android_NativeLibrary_CacheClassesAndMethods(JNIEnv* env, jobject obj) {
@@ -204,12 +213,16 @@ void Java_org_citra_citra_1android_NativeLibrary_SetUserDirectory(JNIEnv* env, j
     FileUtil::SetCurrentDir(GetJString(env, jDirectory));
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_UnPauseEmulation(JNIEnv* env, jobject obj) {}
+void Java_org_citra_citra_1android_NativeLibrary_UnPauseEmulation(JNIEnv* env, jobject obj) {
+    pause_emulation = false;
+    cv.notify_all();
+}
 
 void Java_org_citra_citra_1android_NativeLibrary_PauseEmulation(JNIEnv* env, jobject obj) {}
 
 void Java_org_citra_citra_1android_NativeLibrary_StopEmulation(JNIEnv* env, jobject obj) {
-    bool is_running = false;
+    is_running = false;
+    cv.notify_all();
 }
 
 jboolean Java_org_citra_citra_1android_NativeLibrary_IsRunning(JNIEnv* env, jobject obj) {
@@ -454,6 +467,8 @@ void Java_org_citra_citra_1android_NativeLibrary_Run__Ljava_lang_String_2(JNIEnv
                                                                           jstring path_) {
     const std::string path = GetJString(env, path_);
 
-    is_running = true;
+    if(is_running){
+        is_running = false;
+    }
     RunCitra(path);
 }
