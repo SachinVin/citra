@@ -57,7 +57,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     return JNI_VERSION_1_6;
 }
 
-static int RunCitra(const std::string& path) {
+static int RunCitra(const std::string& filepath) {
     LOG_INFO(Frontend, "Citra is Starting");
     Config config;
     int option_index = 0;
@@ -65,10 +65,6 @@ static int RunCitra(const std::string& path) {
     u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port);
     std::string movie_record;
     std::string movie_play;
-
-    std::string filepath;
-
-    filepath = path;
 
     Log::Filter log_filter;
     log_filter.ParseFilterString(Settings::values.log_filter);
