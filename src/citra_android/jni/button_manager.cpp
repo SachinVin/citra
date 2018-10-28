@@ -54,12 +54,16 @@ public:
             [key_button](const KeyButtonPair& pair) { return pair.key_button == key_button; });
     }
 
-    void ChangeButtonStatus(int button_id, bool pressed) {
+    bool ChangeButtonStatus(int button_id, bool pressed) {
         std::lock_guard<std::mutex> guard(mutex);
         for (const KeyButtonPair& pair : list) {
-            if (pair.button_id == button_id)
+            if (pair.button_id == button_id) {
                 pair.key_button->status.store(pressed);
+                return true;
+            }
         }
+        // If we don't find the button don't consume the button press event
+        return false;
     }
 
     void ChangeAllButtonStatus(bool pressed) {
@@ -87,12 +91,12 @@ std::unique_ptr<Input::ButtonDevice> ButtonFactory::Create(const Common::ParamPa
     return std::move(button);
 }
 
-void ButtonFactory::PressKey(int button_id) {
-    button_list->ChangeButtonStatus(button_id, true);
+bool ButtonFactory::PressKey(int button_id) {
+    return button_list->ChangeButtonStatus(button_id, true);
 }
 
-void ButtonFactory::ReleaseKey(int button_id) {
-    button_list->ChangeButtonStatus(button_id, false);
+bool ButtonFactory::ReleaseKey(int button_id) {
+    return button_list->ChangeButtonStatus(button_id, false);
 }
 
 // Joystick Handler

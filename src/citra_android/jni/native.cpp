@@ -232,13 +232,14 @@ jboolean Java_org_citra_citra_1android_NativeLibrary_IsRunning(JNIEnv* env, jobj
 jboolean Java_org_citra_citra_1android_NativeLibrary_onGamePadEvent(JNIEnv* env, jobject obj,
                                                                     jstring jDevice, jint button,
                                                                     jint pressed) {
+    bool consumed;
     if (pressed) {
-        InputManager::ButtonHandler()->PressKey(button);
+        consumed = InputManager::ButtonHandler()->PressKey(button);
     } else {
-        InputManager::ButtonHandler()->ReleaseKey(button);
+        consumed = InputManager::ButtonHandler()->ReleaseKey(button);
     }
 
-    return static_cast<jboolean>(true);
+    return static_cast<jboolean>(consumed);
 }
 
 void Java_org_citra_citra_1android_NativeLibrary_onGamePadMoveEvent(JNIEnv* env, jobject obj,

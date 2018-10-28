@@ -224,14 +224,16 @@ public:
     /**
      * Sets the status of all buttons bound with the key to pressed
      * @param key_code the code of the key to press
+     * @return whether the key event is consumed or not
      */
-    void PressKey(int button_id);
+    bool PressKey(int button_id);
 
     /**
      * Sets the status of all buttons bound with the key to released
      * @param key_code the code of the key to release
+     * @return whether the key event is consumed or not
      */
-    void ReleaseKey(int key_code);
+    bool ReleaseKey(int button_id);
 
     void ReleaseAllKeys();
 
