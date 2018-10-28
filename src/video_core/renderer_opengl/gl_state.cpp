@@ -193,13 +193,12 @@ void OpenGLState::Apply() const {
     }
 
     // GLES3 does not support glLogicOp
-    if(!GLAD_GL_ES_VERSION_3_1) {
+    if (!GLAD_GL_ES_VERSION_3_1) {
         if (logic_op != cur_state.logic_op) {
             glLogicOp(logic_op);
         }
-    }
-    else {
-        LOG_TRACE(Render_OpenGL,"glLogicOps are unimplemented...");
+    } else {
+        LOG_TRACE(Render_OpenGL, "glLogicOps are unimplemented...");
     }
 
     // Textures
@@ -324,12 +323,14 @@ void OpenGLState::Apply() const {
     }
 
     // Clip distance
-    for (size_t i = 0; i < clip_distance.size(); ++i) {
-        if (clip_distance[i] != cur_state.clip_distance[i]) {
-            if (clip_distance[i]) {
-                glEnable(GL_CLIP_DISTANCE0 + static_cast<GLenum>(i));
-            } else {
-                glDisable(GL_CLIP_DISTANCE0 + static_cast<GLenum>(i));
+    if (!GLAD_GL_ES_VERSION_3_1 || GLAD_GL_EXT_clip_cull_distance) {
+        for (size_t i = 0; i < clip_distance.size(); ++i) {
+            if (clip_distance[i] != cur_state.clip_distance[i]) {
+                if (clip_distance[i]) {
+                    glEnable(GL_CLIP_DISTANCE0 + static_cast<GLenum>(i));
+                } else {
+                    glDisable(GL_CLIP_DISTANCE0 + static_cast<GLenum>(i));
+                }
             }
         }
     }
