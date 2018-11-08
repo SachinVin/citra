@@ -152,7 +152,7 @@ void Config::ReadValues() {
     Settings::values.region_value =
         sdl2_config->GetInteger("System", "region_value", Settings::REGION_VALUE_AUTO_SELECT);
     Settings::values.init_clock =
-        static_cast<Settings::InitClock>(sdl2_config->GetInteger("System", "init_clock", 1));
+        static_cast<Settings::InitClock>(sdl2_config->GetInteger("System", "init_clock", 0));
     {
         std::tm t;
         t.tm_sec = 1;
