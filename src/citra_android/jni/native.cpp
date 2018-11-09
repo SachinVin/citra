@@ -16,7 +16,6 @@
 #include "citra_android/jni/config.h"
 #include "citra_android/jni/emu_window/emu_window.h"
 #include "citra_android/jni/game_info.h"
-#include "citra_android/jni/native.h"
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/backend.h"
@@ -34,6 +33,8 @@
 #include "core/movie.h"
 #include "core/settings.h"
 #include "network/network.h"
+
+#include "citra_android/jni/native.h"
 
 JavaVM* g_java_vm;
 
@@ -154,7 +155,7 @@ static int RunCitra(const std::string& filepath) {
     is_running = true;
 
     while (is_running) {
-        if(!pause_emulation) {
+        if (!pause_emulation) {
             system.RunLoop();
         } else {
             std::unique_lock<std::mutex> lock(running_mutex);
@@ -176,8 +177,7 @@ static std::string GetJString(JNIEnv* env, jstring jstr) {
     return result;
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_SurfaceChanged(JNIEnv* env, jobject obj,
-                                                                jobject surf) {
+void JNI_NATIVE_LIBRARY(SurfaceChanged)(JNIEnv* env, jobject obj, jobject surf) {
     s_surf = ANativeWindow_fromSurface(env, surf);
 
     if (is_running) {
@@ -187,11 +187,11 @@ void Java_org_citra_citra_1android_NativeLibrary_SurfaceChanged(JNIEnv* env, job
     LOG_INFO(Frontend, "Surface changed");
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_SurfaceDestroyed(JNIEnv* env, jobject obj) {
+void JNI_NATIVE_LIBRARY(SurfaceDestroyed)(JNIEnv* env, jobject obj) {
     pause_emulation = true;
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_CacheClassesAndMethods(JNIEnv* env, jobject obj) {
+void JNI_NATIVE_LIBRARY(CacheClassesAndMethods)(JNIEnv* env, jobject obj) {
     // This class reference is only valid for the lifetime of this method.
     jclass localClass = env->FindClass("org/citra/citra_android/NativeLibrary");
 
@@ -208,30 +208,28 @@ void Java_org_citra_citra_1android_NativeLibrary_CacheClassesAndMethods(JNIEnv* 
                                                 "(Ljava/lang/String;Ljava/lang/String;Z)Z");
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_SetUserDirectory(JNIEnv* env, jobject obj,
-                                                                  jstring jDirectory) {
+void JNI_NATIVE_LIBRARY(SetUserDirectory)(JNIEnv* env, jobject obj, jstring jDirectory) {
     FileUtil::SetCurrentDir(GetJString(env, jDirectory));
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_UnPauseEmulation(JNIEnv* env, jobject obj) {
+void JNI_NATIVE_LIBRARY(UnPauseEmulation)(JNIEnv* env, jobject obj) {
     pause_emulation = false;
     cv.notify_all();
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_PauseEmulation(JNIEnv* env, jobject obj) {}
+void JNI_NATIVE_LIBRARY(PauseEmulation)(JNIEnv* env, jobject obj) {}
 
-void Java_org_citra_citra_1android_NativeLibrary_StopEmulation(JNIEnv* env, jobject obj) {
+void JNI_NATIVE_LIBRARY(StopEmulation)(JNIEnv* env, jobject obj) {
     is_running = false;
     cv.notify_all();
 }
 
-jboolean Java_org_citra_citra_1android_NativeLibrary_IsRunning(JNIEnv* env, jobject obj) {
+jboolean JNI_NATIVE_LIBRARY(IsRunning)(JNIEnv* env, jobject obj) {
     return static_cast<jboolean>(is_running);
 }
 
-jboolean Java_org_citra_citra_1android_NativeLibrary_onGamePadEvent(JNIEnv* env, jobject obj,
-                                                                    jstring jDevice, jint button,
-                                                                    jint pressed) {
+jboolean JNI_NATIVE_LIBRARY(onGamePadEvent)(JNIEnv* env, jobject obj, jstring jDevice, jint button,
+                                            jint pressed) {
     bool consumed;
     if (pressed) {
         consumed = InputManager::ButtonHandler()->PressKey(button);
@@ -242,28 +240,23 @@ jboolean Java_org_citra_citra_1android_NativeLibrary_onGamePadEvent(JNIEnv* env,
     return static_cast<jboolean>(consumed);
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_onGamePadMoveEvent(JNIEnv* env, jobject obj,
-                                                                    jstring jDevice, jint Axis,
-                                                                    jfloat x, jfloat y) {
+void JNI_NATIVE_LIBRARY(onGamePadMoveEvent)(JNIEnv* env, jobject obj, jstring jDevice, jint Axis,
+                                            jfloat x, jfloat y) {
     // Citra uses an inverted y axis sent by the frontend
     y = -y;
     InputManager::AnalogHandler()->MoveJoystick(Axis, x, y);
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_onTouchEvent(JNIEnv* env, jobject obj, jfloat x,
-                                                              jfloat y, jboolean pressed) {
-    LOG_DEBUG(Frontend, "Touch at x: %d y: %d", (int)x, (int)y);
+void JNI_NATIVE_LIBRARY(onTouchEvent)(JNIEnv* env, jobject obj, jfloat x, jfloat y,
+                                      jboolean pressed) {
     emu->OnTouchEvent((int)x, (int)y, (bool)pressed);
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_onTouchMoved(JNIEnv* env, jobject obj, jfloat x,
-                                                              jfloat y) {
-    LOG_DEBUG(Frontend, "Touch at x: %d y: %d", (int)x, (int)y);
+void JNI_NATIVE_LIBRARY(onTouchMoved)(JNIEnv* env, jobject obj, jfloat x, jfloat y) {
     emu->OnTouchMoved((int)x, (int)y);
 }
 
-jintArray Java_org_citra_citra_1android_NativeLibrary_GetBanner(JNIEnv* env, jobject obj,
-                                                                jstring jFilepath) {
+jintArray JNI_NATIVE_LIBRARY(GetBanner)(JNIEnv* env, jobject obj, jstring jFilepath) {
     std::string filepath = GetJString(env, jFilepath);
 
     std::vector<u16> icon_data = GameInfo::GetIcon(filepath);
@@ -271,14 +264,13 @@ jintArray Java_org_citra_citra_1android_NativeLibrary_GetBanner(JNIEnv* env, job
         return 0;
     }
 
-    jintArray Banner = env->NewIntArray(icon_data.size());
-    env->SetIntArrayRegion(Banner, 0, icon_data.size(), reinterpret_cast<jint*>(icon_data.data()));
+    jintArray icon = env->NewIntArray(icon_data.size());
+    env->SetIntArrayRegion(icon, 0, icon_data.size(), reinterpret_cast<jint*>(icon_data.data()));
 
-    return Banner;
+    return icon;
 }
 
-jstring Java_org_citra_citra_1android_NativeLibrary_GetTitle(JNIEnv* env, jobject obj,
-                                                             jstring jFilepath) {
+jstring JNI_NATIVE_LIBRARY(GetTitle)(JNIEnv* env, jobject obj, jstring jFilepath) {
     std::string filepath = GetJString(env, jFilepath);
 
     char16_t* Title = GameInfo::GetTitle(filepath);
@@ -290,23 +282,19 @@ jstring Java_org_citra_citra_1android_NativeLibrary_GetTitle(JNIEnv* env, jobjec
     return env->NewStringUTF(Common::UTF16ToUTF8(Title).data());
 }
 
-jstring Java_org_citra_citra_1android_NativeLibrary_GetDescription(JNIEnv* env, jobject obj,
-                                                                   jstring jFilename) {
+jstring JNI_NATIVE_LIBRARY(GetDescription)(JNIEnv* env, jobject obj, jstring jFilename) {
     return jFilename;
 }
 
-jstring Java_org_citra_citra_1android_NativeLibrary_GetGameId(JNIEnv* env, jobject obj,
-                                                              jstring jFilename) {
+jstring JNI_NATIVE_LIBRARY(GetGameId)(JNIEnv* env, jobject obj, jstring jFilename) {
     return jFilename;
 }
 
-jint Java_org_citra_citra_1android_NativeLibrary_GetCountry(JNIEnv* env, jobject obj,
-                                                            jstring jFilename) {
+jint JNI_NATIVE_LIBRARY(GetCountry)(JNIEnv* env, jobject obj, jstring jFilename) {
     return 0;
 }
 
-jstring Java_org_citra_citra_1android_NativeLibrary_GetCompany(JNIEnv* env, jobject obj,
-                                                               jstring jFilepath) {
+jstring JNI_NATIVE_LIBRARY(GetCompany)(JNIEnv* env, jobject obj, jstring jFilepath) {
     std::string filepath = GetJString(env, jFilepath);
 
     char16_t* Publisher = GameInfo::GetPublisher(filepath);
@@ -318,157 +306,40 @@ jstring Java_org_citra_citra_1android_NativeLibrary_GetCompany(JNIEnv* env, jobj
     return env->NewStringUTF(Common::UTF16ToUTF8(Publisher).data());
 }
 
-jlong Java_org_citra_citra_1android_NativeLibrary_GetFilesize(JNIEnv* env, jobject obj,
-                                                              jstring jFilename) {
+jlong JNI_NATIVE_LIBRARY(GetFilesize)(JNIEnv* env, jobject obj, jstring jFilename) {
     return 0;
 }
 
-jstring Java_org_citra_citra_1android_NativeLibrary_GetVersionString(JNIEnv* env, jobject obj) {
+jstring JNI_NATIVE_LIBRARY(GetVersionString)(JNIEnv* env, jobject obj) {
     return nullptr;
 }
 
-jstring Java_org_citra_citra_1android_NativeLibrary_GetGitRevision(JNIEnv* env, jobject obj) {
+jstring JNI_NATIVE_LIBRARY(GetGitRevision)(JNIEnv* env, jobject obj) {
     return nullptr;
 }
 
-void Java_org_citra_citra_1android_NativeLibrary_SaveScreenShot(JNIEnv* env, jobject obj) {}
-
-void Java_org_citra_citra_1android_NativeLibrary_eglBindAPI(JNIEnv* env, jobject obj, jint api) {}
-
-jstring Java_org_citra_citra_1android_NativeLibrary_GetConfig(JNIEnv* env, jobject obj,
-                                                              jstring jFile, jstring jSection,
-                                                              jstring jKey, jstring jDefault) {
-    return nullptr;
-}
-
-void Java_org_citra_citra_1android_NativeLibrary_SetConfig(JNIEnv* env, jobject obj, jstring jFile,
-                                                           jstring jSection, jstring jKey,
-                                                           jstring jValue) {}
-
-void Java_org_citra_citra_1android_NativeLibrary_SetFilename(JNIEnv* env, jobject obj,
-                                                             jstring jFile) {}
-
-void Java_org_citra_citra_1android_NativeLibrary_SaveState(JNIEnv* env, jobject obj, jint slot,
-                                                           jboolean wait) {}
-
-void Java_org_citra_citra_1android_NativeLibrary_SaveStateAs(JNIEnv* env, jobject obj, jstring path,
-                                                             jboolean wait) {}
-
-void Java_org_citra_citra_1android_NativeLibrary_LoadState(JNIEnv* env, jobject obj, jint slot) {}
-
-void Java_org_citra_citra_1android_NativeLibrary_LoadStateAs(JNIEnv* env, jobject obj,
-                                                             jstring path) {}
-
-void Java_org_citra_citra_1android_services_DirectoryInitializationService_CreateUserDirectories(
-    JNIEnv* env, jobject obj) {}
-
-jstring Java_org_citra_citra_1android_NativeLibrary_GetUserDirectory(JNIEnv* env, jobject obj) {
-
-    return nullptr;
-}
-
-void Java_org_citra_citra_1android_NativeLibrary_CreateConfigFile() {
+void JNI_NATIVE_LIBRARY(CreateConfigFile)(JNIEnv* env, jobject obj) {
     new Config();
 }
 
-jint Java_org_citra_citra_1android_NativeLibrary_DefaultCPUCore(JNIEnv* env, jobject obj) {
-    return 0;
-}
+void JNI_NATIVE_LIBRARY(SetProfiling)(JNIEnv* env, jobject obj, jboolean enable) {}
 
-void Java_org_citra_citra_1android_NativeLibrary_SetProfiling(JNIEnv* env, jobject obj,
-                                                              jboolean enable) {}
+void JNI_NATIVE_LIBRARY(WriteProfileResults)(JNIEnv* env, jobject obj) {}
 
-void Java_org_citra_citra_1android_NativeLibrary_WriteProfileResults(JNIEnv* env, jobject obj) {}
-
-void Java_org_citra_citra_1android_NativeLibrary_Run__Ljava_lang_String_2Ljava_lang_String_2Z(
-    JNIEnv* env, jobject obj, jstring jFile, jstring jSavestate, jboolean jDeleteSavestate) {}
-
-jstring Java_org_citra_citra_1android_NativeLibrary_GetUserSetting(JNIEnv* env, jclass type,
-                                                                   jstring gameID_,
-                                                                   jstring Section_, jstring Key_) {
-    const char* gameID = env->GetStringUTFChars(gameID_, 0);
-    const char* Section = env->GetStringUTFChars(Section_, 0);
-    const char* Key = env->GetStringUTFChars(Key_, 0);
-
-    // TODO
-
-    env->ReleaseStringUTFChars(gameID_, gameID);
-    env->ReleaseStringUTFChars(Section_, Section);
-    env->ReleaseStringUTFChars(Key_, Key);
-
-    return env->NewStringUTF("");
-}
-
-void Java_org_citra_citra_1android_NativeLibrary_SetUserSetting(JNIEnv* env, jclass type,
-                                                                jstring gameID_, jstring Section_,
-                                                                jstring Key_, jstring Value_) {
-    const char* gameID = env->GetStringUTFChars(gameID_, 0);
-    const char* Section = env->GetStringUTFChars(Section_, 0);
-    const char* Key = env->GetStringUTFChars(Key_, 0);
-    const char* Value = env->GetStringUTFChars(Value_, 0);
-
-    // TODO
-
-    env->ReleaseStringUTFChars(gameID_, gameID);
-    env->ReleaseStringUTFChars(Section_, Section);
-    env->ReleaseStringUTFChars(Key_, Key);
-    env->ReleaseStringUTFChars(Value_, Value);
-}
-
-void Java_org_citra_citra_1android_NativeLibrary_InitGameIni(JNIEnv* env, jclass type,
-                                                             jstring gameID_) {
-    const char* gameID = env->GetStringUTFChars(gameID_, 0);
-
-    // TODO
-
-    env->ReleaseStringUTFChars(gameID_, gameID);
-}
-
-void Java_org_citra_citra_1android_NativeLibrary_ChangeDisc(JNIEnv* env, jclass type,
-                                                            jstring path_) {
-    const char* path = env->GetStringUTFChars(path_, 0);
-
-    // TODO
-
-    env->ReleaseStringUTFChars(path_, path);
-}
-
-void Java_org_citra_citra_1android_NativeLibrary_RefreshWiimotes(JNIEnv* env, jclass type) {
-
-    // TODO
-}
-
-jint Java_org_citra_citra_1android_NativeLibrary_GetPlatform(JNIEnv* env, jclass type,
-                                                             jstring filename_) {
-    return 0;
-}
-
-jdoubleArray Java_org_citra_citra_1android_NativeLibrary_GetPerfStats(JNIEnv* env, jclass type) {
-
+jdoubleArray JNI_NATIVE_LIBRARY(GetPerfStats)(JNIEnv* env, jclass type) {
     auto results = Core::System::GetInstance().GetAndResetPerfStats();
-
     // Converting the structure into an array makes it easier to pass it to the frontend
     double stats[4] = {results.system_fps, results.game_fps, results.frametime,
                        results.emulation_speed};
-
     jdoubleArray jstats = env->NewDoubleArray(4);
     env->SetDoubleArrayRegion(jstats, 0, 4, stats);
-
     return jstats;
 }
 
-void Java_org_citra_citra_1android_services_DirectoryInitializationService_SetSysDirectory(
-    JNIEnv* env, jclass type, jstring path_) {
-    const char* path = env->GetStringUTFChars(path_, 0);
-
-    env->ReleaseStringUTFChars(path_, path);
-}
-
-void Java_org_citra_citra_1android_NativeLibrary_Run__Ljava_lang_String_2(JNIEnv* env, jclass type,
-                                                                          jstring path_) {
+void JNI_NATIVE_LIBRARY(Run)(JNIEnv* env, jclass type, jstring path_) {
     const std::string path = GetJString(env, path_);
 
-    if(is_running){
+    if (is_running) {
         is_running = false;
     }
     RunCitra(path);

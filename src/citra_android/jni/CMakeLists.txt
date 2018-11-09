@@ -33,5 +33,3 @@ PRIVATE
   "-Wl,--whole-archive"
   "-Wl,--no-whole-archive"
 )
-
-set(CPACK_PACKAGE_EXECUTABLES ${CPACK_PACKAGE_EXECUTABLES} main)
