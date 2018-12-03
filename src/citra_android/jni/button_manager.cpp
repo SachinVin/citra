@@ -18,6 +18,9 @@
 
 namespace InputManager {
 
+static std::shared_ptr<ButtonFactory> button;
+static std::shared_ptr<AnalogFactory> analog;
+
 // Button Handler
 class KeyButton final : public Input::ButtonDevice {
 public:
@@ -99,6 +102,18 @@ bool ButtonFactory::ReleaseKey(int button_id) {
     return button_list->ChangeButtonStatus(button_id, false);
 }
 
+ButtonFactory* ButtonHandler() {
+    return button.get();
+}
+
+std::string GenerateButtonParamPackage(int button) {
+    Common::ParamPackage param{
+        {"engine", "gamepad"},
+        {"code", std::to_string(button)},
+    };
+    return param.Serialize();
+}
+
 // Joystick Handler
 class Joystick final : public Input::AnalogDevice {
 public:
@@ -176,8 +191,18 @@ void AnalogFactory::MoveJoystick(int analog_id, float x, float y) {
     analog_list->ChangeJoystickStatus(analog_id, x, y);
 }
 
-static std::shared_ptr<ButtonFactory> button;
-static std::shared_ptr<AnalogFactory> analog;
+
+AnalogFactory* AnalogHandler() {
+    return analog.get();
+}
+
+std::string GenerateAnalogParamPackage(int button) {
+    Common::ParamPackage param{
+        {"engine", "gamepad"},
+        {"code", std::to_string(button)},
+    };
+    return param.Serialize();
+}
 
 void Init() {
     button = std::make_shared<ButtonFactory>();
@@ -192,27 +217,4 @@ void Shutdown() {
     analog.reset();
 }
 
-ButtonFactory* ButtonHandler() {
-    return button.get();
-}
-
-AnalogFactory* AnalogHandler() {
-    return analog.get();
-}
-
-std::string GenerateButtonParamPackage(int button) {
-    Common::ParamPackage param{
-        {"engine", "gamepad"},
-        {"code", std::to_string(button)},
-    };
-    return param.Serialize();
-}
-
-std::string GenerateAnalogParamPackage(int button) {
-    Common::ParamPackage param{
-        {"engine", "gamepad"},
-        {"code", std::to_string(button)},
-    };
-    return param.Serialize();
-}
 } // namespace InputManager
