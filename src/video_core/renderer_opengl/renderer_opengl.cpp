@@ -354,11 +354,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
     case GPU::Regs::PixelFormat::RGBA8:
         internal_format = GL_RGBA;
         texture.gl_format = GL_RGBA;
-        if (GLAD_GL_ES_VERSION_3_0) {
-            texture.gl_type = GL_UNSIGNED_BYTE;
-        } else {
-            texture.gl_type = GL_UNSIGNED_INT_8_8_8_8;
-        }
+        texture.gl_type = GLAD_GL_ES_VERSION_3_0 ? GL_UNSIGNED_BYTE : GL_UNSIGNED_INT_8_8_8_8;
         break;
 
     case GPU::Regs::PixelFormat::RGB8:
@@ -369,11 +365,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
         internal_format = GL_RGB;
 
         // GLES Dosen't support BGR , Use RGB instead
-        if (GLAD_GL_ES_VERSION_3_1) {
-            texture.gl_format = GL_RGB;
-        } else {
-            texture.gl_format = GL_BGR;
-        }
+        texture.gl_format = GLAD_GL_ES_VERSION_3_0 ? GL_RGB : GL_BGR;
         texture.gl_type = GL_UNSIGNED_BYTE;
         break;
 
