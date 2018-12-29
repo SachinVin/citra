@@ -64,12 +64,6 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 static int RunCitra(const std::string& filepath) {
     LOG_INFO(Frontend, "Citra is Starting");
     Config config;
-    int option_index = 0;
-    bool use_gdbstub = Settings::values.use_gdbstub;
-    u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port);
-    std::string movie_record;
-    std::string movie_play;
-
     Log::Filter log_filter;
     log_filter.ParseFilterString(Settings::values.log_filter);
     Log::SetGlobalFilter(log_filter);
@@ -78,6 +72,7 @@ static int RunCitra(const std::string& filepath) {
     FileUtil::CreateFullPath(FileUtil::GetUserPath(D_LOGS_IDX));
     Log::AddBackend(
         std::make_unique<Log::FileBackend>(FileUtil::GetUserPath(D_LOGS_IDX) + LOG_FILE));
+
     MicroProfileOnThreadCreate("EmuThread");
     SCOPE_EXIT({ MicroProfileShutdown(); });
 
@@ -86,21 +81,10 @@ static int RunCitra(const std::string& filepath) {
         return -1;
     }
 
-    if (!movie_record.empty() && !movie_play.empty()) {
-        LOG_CRITICAL(Frontend, "Cannot both play and record a movie");
-        return -1;
-    }
-
-    log_filter.ParseFilterString(Settings::values.log_filter);
-
     // Register frontend applets
     Frontend::RegisterDefaultApplets();
 
-    // Apply the command line arguments
-    Settings::values.gdbstub_port = gdb_port;
-    Settings::values.use_gdbstub = use_gdbstub;
     Settings::Apply();
-
     InputManager::Init();
     emu = new EmuWindow_Android(s_surf);
     Core::System& system{Core::System::GetInstance()};
@@ -143,13 +127,6 @@ static int RunCitra(const std::string& filepath) {
     }
 
     Core::Telemetry().AddField(Telemetry::FieldType::App, "Frontend", "SDL");
-
-    if (!movie_play.empty()) {
-        Core::Movie::GetInstance().StartPlayback(movie_play);
-    }
-    if (!movie_record.empty()) {
-        Core::Movie::GetInstance().StartRecording(movie_record);
-    }
 
     is_running = true;
     pause_emulation = false;
