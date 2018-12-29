@@ -58,12 +58,7 @@ std::condition_variable running_cv;
 jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     g_java_vm = vm;
 
-    return JNI_VERSION_1_6;
-}
-
-static int RunCitra(const std::string& filepath) {
-    LOG_INFO(Frontend, "Citra is Starting");
-    Config config;
+    // Initialise Logger
     Log::Filter log_filter;
     log_filter.ParseFilterString(Settings::values.log_filter);
     Log::SetGlobalFilter(log_filter);
@@ -72,6 +67,16 @@ static int RunCitra(const std::string& filepath) {
     FileUtil::CreateFullPath(FileUtil::GetUserPath(D_LOGS_IDX));
     Log::AddBackend(
         std::make_unique<Log::FileBackend>(FileUtil::GetUserPath(D_LOGS_IDX) + LOG_FILE));
+
+    LOG_INFO(Frontend, "Logging backend initialised");
+
+    return JNI_VERSION_1_6;
+}
+
+static int RunCitra(const std::string& filepath) {
+    LOG_INFO(Frontend, "Citra is Starting");
+
+    Config config;
 
     MicroProfileOnThreadCreate("EmuThread");
     SCOPE_EXIT({ MicroProfileShutdown(); });
