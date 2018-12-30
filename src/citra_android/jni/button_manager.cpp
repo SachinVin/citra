@@ -151,22 +151,16 @@ public:
             [key_button](const AnalogPair& pair) { return pair.key_button == key_button; });
     }
 
-    void ChangeJoystickStatus(int analog_id, float x, float y) {
+    bool ChangeJoystickStatus(int analog_id, float x, float y) {
         std::lock_guard<std::mutex> guard(mutex);
         for (const AnalogPair& pair : list) {
             if (pair.analog_id == analog_id) {
                 pair.key_button->x_axis.store(x);
                 pair.key_button->y_axis.store(y);
+                return true;
             }
         }
-    }
-
-    void ChangeAllButtonStatus(int analog_id, float x, float y) {
-        std::lock_guard<std::mutex> guard(mutex);
-        for (const AnalogPair& pair : list) {
-            pair.key_button->x_axis.store(x);
-            pair.key_button->y_axis.store(y);
-        }
+        return false;
     }
 
 private:

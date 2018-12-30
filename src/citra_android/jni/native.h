@@ -25,7 +25,7 @@ JNIEXPORT jboolean JNICALL Java_org_citra_citra_1android_NativeLibrary_IsRunning
 JNIEXPORT jboolean JNICALL Java_org_citra_citra_1android_NativeLibrary_onGamePadEvent(
     JNIEnv* env, jobject obj, jstring jDevice, jint Button, jint Action);
 
-JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_onGamePadMoveEvent(
+JNIEXPORT jboolean JNICALL Java_org_citra_citra_1android_NativeLibrary_onGamePadMoveEvent(
     JNIEnv* env, jobject obj, jstring jDevice, jint Axis, jfloat x, jfloat y);
 
 JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_onTouchEvent(JNIEnv* env,
