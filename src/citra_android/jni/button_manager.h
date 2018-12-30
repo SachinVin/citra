@@ -41,6 +41,9 @@ enum ButtonType {
 };
 
 class ButtonList;
+class AnalogButtonList;
+class AnalogList;
+
 /**
  * A button device factory representing a gamepad. It receives input events and forward them
  * to all button devices it created.
@@ -70,13 +73,21 @@ public:
      */
     bool ReleaseKey(int button_id);
 
+    /**
+     * Sets the status of all buttons bound with the key to released
+     * @param axis_id the code of the axis
+     * @param axis_val the value of the axis
+     * @return whether the key event is consumed or not
+     */
+    bool AnalogButtonEvent(int axis_id, float axis_val);
+
     void ReleaseAllKeys();
 
 private:
     std::shared_ptr<ButtonList> button_list;
+    std::shared_ptr<AnalogButtonList> analog_button_list;
 };
 
-class AnalogList;
 /**
  * An analog device factory representing a gamepad(virtual or physical). It receives input events
  * and forward them to all analog devices it created.
@@ -117,6 +128,8 @@ ButtonFactory* ButtonHandler();
 AnalogFactory* AnalogHandler();
 
 std::string GenerateButtonParamPackage(int type);
+
+std::string GenerateAnalogButtonParamPackage(int axis, float axis_val);
 
 std::string GenerateAnalogParamPackage(int type);
 } // namespace InputManager

@@ -28,6 +28,9 @@ JNIEXPORT jboolean JNICALL Java_org_citra_citra_1android_NativeLibrary_onGamePad
 JNIEXPORT jboolean JNICALL Java_org_citra_citra_1android_NativeLibrary_onGamePadMoveEvent(
     JNIEnv* env, jobject obj, jstring jDevice, jint Axis, jfloat x, jfloat y);
 
+JNIEXPORT jboolean JNICALL Java_org_citra_citra_1android_NativeLibrary_onGamePadAxisEvent(
+    JNIEnv* env, jobject obj, jstring jDevice, jint axis_id, jfloat axis_val);
+
 JNIEXPORT void JNICALL Java_org_citra_citra_1android_NativeLibrary_onTouchEvent(JNIEnv* env,
                                                                                 jobject obj,
                                                                                 jfloat x, jfloat y,

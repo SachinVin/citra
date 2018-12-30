@@ -235,6 +235,14 @@ jboolean Java_org_citra_citra_1android_NativeLibrary_onGamePadMoveEvent(JNIEnv* 
     return static_cast<jboolean>(InputManager::AnalogHandler()->MoveJoystick(Axis, x, y));
 }
 
+jboolean Java_org_citra_citra_1android_NativeLibrary_onGamePadAxisEvent(JNIEnv* env, jobject obj,
+                                                                        jstring jDevice,
+                                                                        jint axis_id,
+                                                                        jfloat axis_val) {
+    return static_cast<jboolean>(
+            InputManager::ButtonHandler()->AnalogButtonEvent(axis_id,axis_val));
+}
+
 void Java_org_citra_citra_1android_NativeLibrary_onTouchEvent(JNIEnv* env, jobject obj, jfloat x,
                                                               jfloat y, jboolean pressed) {
     LOG_DEBUG(Frontend, "Touch at x: %d y: %d", (int)x, (int)y);
