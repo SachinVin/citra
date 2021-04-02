@@ -8,8 +8,8 @@ export PATH="/usr/local/opt/ccache/libexec:/usr/local/opt/llvm/bin:$PATH"
 export CCACHE_CPP2=yes
 export CCACHE_SLOPPINESS=time_macros
 
-export CC="ccache clang"
-export CXX="ccache clang++"
+export CC="ccache AppleClang"
+export CXX="ccache AppleClang"
 # export LDFLAGS="-L/usr/local/opt/llvm/lib"
 # export CPPFLAGS="-I/usr/local/opt/llvm/include"
 
