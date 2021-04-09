@@ -3,8 +3,9 @@
 set -o pipefail
 
 pwd
+ls $(brew --prefix)/opt/qt5
 ls
-export Qt5_DIR="./qt@5/5.15.2"
+export Qt5_DIR=$PWD/qt@5/5.15.2
 export PATH="/usr/local/opt/ccache/libexec:/usr/local/opt/llvm/bin:$PATH"
 # ccache configurations
 export CCACHE_CPP2=yes
