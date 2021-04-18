@@ -22,4 +22,4 @@ ninja
 
 ccache -s
 
-ctest -VV -C Release
+#ctest -VV -C Release
