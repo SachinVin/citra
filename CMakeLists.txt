@@ -117,6 +117,7 @@ if (NOT DEFINED ARCHITECTURE)
     add_definitions(-DARCHITECTURE_GENERIC=1)
 endif()
 message(STATUS "Target architecture: ${ARCHITECTURE}")
+message(STATUS "CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 
 
 # Configure C++ standard
