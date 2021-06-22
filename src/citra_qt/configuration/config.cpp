@@ -490,6 +490,7 @@ void Config::ReadRendererValues() {
     Settings::values.use_shader_jit = ReadSetting(QStringLiteral("use_shader_jit"), true).toBool();
     Settings::values.use_disk_shader_cache =
         ReadSetting(QStringLiteral("use_disk_shader_cache"), true).toBool();
+    Settings::values.use_bloom_hack = ReadSetting(QStringLiteral("use_bloom_hack"), true).toBool();
     Settings::values.use_vsync_new = ReadSetting(QStringLiteral("use_vsync_new"), true).toBool();
     Settings::values.resolution_factor =
         static_cast<u16>(ReadSetting(QStringLiteral("resolution_factor"), 1).toInt());
@@ -999,6 +1000,7 @@ void Config::SaveRendererValues() {
     WriteSetting(QStringLiteral("use_shader_jit"), Settings::values.use_shader_jit, true);
     WriteSetting(QStringLiteral("use_disk_shader_cache"), Settings::values.use_disk_shader_cache,
                  true);
+    WriteSetting(QStringLiteral("use_bloom_hack"), Settings::values.use_bloom_hack, true);
     WriteSetting(QStringLiteral("use_vsync_new"), Settings::values.use_vsync_new, true);
     WriteSetting(QStringLiteral("resolution_factor"), Settings::values.resolution_factor, 1);
     WriteSetting(QStringLiteral("frame_limit"), Settings::values.frame_limit, 100);

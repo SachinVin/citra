@@ -26,6 +26,7 @@ std::atomic<bool> g_hw_shader_enabled;
 std::atomic<bool> g_separable_shader_enabled;
 std::atomic<bool> g_hw_shader_accurate_mul;
 std::atomic<bool> g_use_disk_shader_cache;
+std::atomic<bool> g_use_bloom_hack;
 std::atomic<bool> g_renderer_bg_color_update_requested;
 std::atomic<bool> g_renderer_sampler_update_requested;
 std::atomic<bool> g_renderer_shader_update_requested;

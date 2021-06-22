@@ -154,6 +154,7 @@ struct Values {
     bool use_hw_shader;
     bool separable_shader;
     bool use_disk_shader_cache;
+    bool use_bloom_hack;
     bool shaders_accurate_mul;
     bool use_shader_jit;
     u16 resolution_factor;
